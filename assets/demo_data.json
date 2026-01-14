@@ -1,0 +1,156 @@
+{
+  "totals": {
+    "invested": 4106.08,
+    "value": 4119.89,
+    "pnl": 13.81,
+    "roi": 0.0034
+  },
+  "goal": {
+    "targetPnl": 5000
+  },
+  "assets": [
+    {
+      "asset": "BTC",
+      "invested": 1634.46,
+      "value": 1677.04,
+      "pnl": 42.58,
+      "roi": 0.0261,
+      "weight": 0.4071
+    },
+    {
+      "asset": "ETH",
+      "invested": 770.23,
+      "value": 926.99,
+      "pnl": 156.76,
+      "roi": 0.2035,
+      "weight": 0.2250
+    },
+    {
+      "asset": "LINK",
+      "invested": 799.28,
+      "value": 715.37,
+      "pnl": -83.91,
+      "roi": -0.1050,
+      "weight": 0.1736
+    },
+    {
+      "asset": "SOL",
+      "invested": 492.62,
+      "value": 454.23,
+      "pnl": -38.39,
+      "roi": -0.0779,
+      "weight": 0.1103
+    },
+    {
+      "asset": "AVAX",
+      "invested": 409.50,
+      "value": 346.27,
+      "pnl": -63.23,
+      "roi": -0.1544,
+      "weight": 0.0840
+    }
+  ],
+  "transactions": [
+    {
+      "date": "2025-12-01T14:52:55",
+      "asset": "AVAX",
+      "type": "buy",
+      "usdt": 49.88,
+      "quantity": 3.87,
+      "price": 12.89,
+      "currentValue": 57.51,
+      "pnl": 7.63
+    },
+    {
+      "date": "2025-12-01T14:51:51",
+      "asset": "SOL",
+      "type": "buy",
+      "usdt": 24.97,
+      "quantity": 0.198,
+      "price": 126.09,
+      "currentValue": 29.27,
+      "pnl": 4.30
+    },
+    {
+      "date": "2025-11-26T21:06:44",
+      "asset": "AVAX",
+      "type": "buy",
+      "usdt": 73.25,
+      "quantity": 5.0,
+      "price": 14.65,
+      "currentValue": 74.30,
+      "pnl": 1.05
+    },
+    {
+      "date": "2025-11-26T20:59:48",
+      "asset": "BTC",
+      "type": "buy",
+      "usdt": 49.28,
+      "quantity": 0.00056,
+      "price": 88000.00,
+      "currentValue": 54.47,
+      "pnl": 5.19
+    },
+    {
+      "date": "2025-11-23T03:13:16",
+      "asset": "LINK",
+      "type": "buy",
+      "usdt": 49.92,
+      "quantity": 4.16,
+      "price": 12.00,
+      "currentValue": 59.53,
+      "pnl": 9.61
+    }
+  ],
+  "timeseries": {
+    "portfolioCurve": [
+      {
+        "t": "2025-01-01T00:00:00",
+        "invested": 4000,
+        "value": 4050
+      },
+      {
+        "t": "2025-01-02T00:00:00",
+        "invested": 4000,
+        "value": 4080
+      },
+      {
+        "t": "2025-01-03T00:00:00",
+        "invested": 4000,
+        "value": 4020
+      },
+      {
+        "t": "2025-01-04T00:00:00",
+        "invested": 4000,
+        "value": 4100
+      },
+      {
+        "t": "2025-01-05T00:00:00",
+        "invested": 4050,
+        "value": 4120
+      }
+    ],
+    "dailyReturns": [
+      {
+        "date": "2025-01-01",
+        "return": 0.0125
+      },
+      {
+        "date": "2025-01-02",
+        "return": 0.0074
+      },
+      {
+        "date": "2025-01-03",
+        "return": -0.0148
+      },
+      {
+        "date": "2025-01-04",
+        "return": 0.0198
+      },
+      {
+        "date": "2025-01-05",
+        "return": 0.0049
+      }
+    ]
+  }
+}

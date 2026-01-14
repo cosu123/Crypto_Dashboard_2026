@@ -1,0 +1,3529 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>HEIDY · CRYPTO PORTFOLIO — Dashboard Premium (Gestión 2026)</title>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js">
+// Mejoras JavaScript para el Dashboard
+// Este código debe ser agregado al final del script en index.html
+
+// ============================================
+// SISTEMA DE NOTIFICACIONES TOAST
+// ============================================
+
+const ToastManager = {
+  container: null,
+  
+  init() {
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.className = 'toast-container';
+      this.container.setAttribute('role', 'region');
+      this.container.setAttribute('aria-label', 'Notificaciones');
+      document.body.appendChild(this.container);
+    }
+  },
+  
+  show(message, type = 'info', duration = 4000) {
+    this.init();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'polite');
+    
+    const icons = {
+      success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>',
+      error: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>',
+      info: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 10v4M10 6h.01"/></svg>',
+      loading: '<div class="spinner"></div>'
+    };
+    
+    toast.innerHTML = `
+      <div class="toast-icon">${icons[type] || icons.info}</div>
+      <div class="toast-message">${message}</div>
+      ${type !== 'loading' ? '<button class="toast-close" aria-label="Cerrar notificación">×</button>' : ''}
+    `;
+    
+    const closeBtn = toast.querySelector('.toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.remove(toast));
+    }
+    
+    this.container.appendChild(toast);
+    
+    if (duration > 0 && type !== 'loading') {
+      setTimeout(() => this.remove(toast), duration);
+    }
+    
+    return toast;
+  },
+  
+  remove(toast) {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  },
+  
+  success(message, duration) {
+    return this.show(message, 'success', duration);
+  },
+  
+  error(message, duration) {
+    return this.show(message, 'error', duration || 5000);
+  },
+  
+  info(message, duration) {
+    return this.show(message, 'info', duration);
+  },
+  
+  loading(message) {
+    return this.show(message, 'loading', 0);
+  }
+};
+
+// ============================================
+// SINCRONIZACIÓN CON GOOGLE SHEETS
+// ============================================
+
+const GoogleSheetsSync = {
+  // URL del CSV publicado desde Google Sheets
+  // Reemplazar con tu URL real después de publicar el Sheet
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?gid=0&single=true&output=csv',
+  
+  async sync() {
+    const loadingToast = ToastManager.loading('Sincronizando con Google Sheets...');
+    
+    try {
+      const response = await fetch(this.CSV_URL);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      const jsonData = this.parseCSV(csvText);
+      
+      // Cargar datos en el dashboard
+      loadData(jsonData);
+      
+      ToastManager.remove(loadingToast);
+      ToastManager.success('✓ Datos sincronizados correctamente');
+      
+      return jsonData;
+    } catch (error) {
+      console.error('Error al sincronizar:', error);
+      ToastManager.remove(loadingToast);
+      ToastManager.error('✗ Error al sincronizar con Google Sheets: ' + error.message);
+      throw error;
+    }
+  },
+  
+  parseCSV(csvText) {
+    // Parsear CSV y convertir a formato JSON esperado
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',');
+    
+    const transactions = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      const values = lines[i].split(',');
+      const transaction = {};
+      
+      headers.forEach((header, index) => {
+        transaction[header.trim()] = values[index]?.trim();
+      });
+      
+      transactions.push(transaction);
+    }
+    
+    // Calcular totales y métricas
+    return this.calculateMetrics(transactions);
+  },
+  
+  calculateMetrics(transactions) {
+    // Implementar lógica de cálculo de métricas
+    // Esta es una versión simplificada
+    const assets = {};
+    let totalInvested = 0;
+    let totalValue = 0;
+    
+    transactions.forEach(tx => {
+      const asset = tx.Activo || tx.asset;
+      const invested = parseFloat(tx['Inversión USDT'] || tx.usdt || 0);
+      const value = parseFloat(tx['Valor actual'] || tx.currentValue || 0);
+      
+      if (!assets[asset]) {
+        assets[asset] = { asset, invested: 0, value: 0, transactions: [] };
+      }
+      
+      assets[asset].invested += invested;
+      assets[asset].value += value;
+      assets[asset].transactions.push(tx);
+      
+      totalInvested += invested;
+      totalValue += value;
+    });
+    
+    const assetArray = Object.values(assets).map(a => ({
+      ...a,
+      pnl: a.value - a.invested,
+      roi: a.invested > 0 ? (a.value - a.invested) / a.invested : 0,
+      weight: totalValue > 0 ? a.value / totalValue : 0
+    }));
+    
+    return {
+      totals: {
+        invested: totalInvested,
+        value: totalValue,
+        pnl: totalValue - totalInvested,
+        roi: totalInvested > 0 ? (totalValue - totalInvested) / totalInvested : 0
+      },
+      goal: {
+        targetPnl: 5000
+      },
+      assets: assetArray,
+      transactions: transactions,
+      timeseries: {
+        portfolioCurve: [],
+        dailyReturns: []
+      }
+    };
+  }
+};
+
+// ============================================
+// PAGINACIÓN DE TABLA
+// ============================================
+
+const TablePagination = {
+  currentPage: 1,
+  rowsPerPage: 25,
+  totalRows: 0,
+  filteredData: [],
+  
+  init(data) {
+    this.filteredData = data;
+    this.totalRows = data.length;
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  render() {
+    const start = (this.currentPage - 1) * this.rowsPerPage;
+    const end = start + this.rowsPerPage;
+    const pageData = this.filteredData.slice(start, end);
+    
+    // Renderizar filas de la tabla
+    this.renderTableRows(pageData);
+    
+    // Actualizar controles de paginación
+    this.renderControls();
+  },
+  
+  renderTableRows(data) {
+    const tbody = document.querySelector('#txTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    data.forEach(tx => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${new Date(tx.date).toLocaleString('es', {dateStyle:'short', timeStyle:'short'})}</td>
+        <td><strong>${tx.asset}</strong></td>
+        <td>${tx.type}</td>
+        <td>USDT ${fmtMoney(tx.usdt)}</td>
+        <td>${tx.quantity.toFixed(6)}</td>
+        <td>USDT ${fmtMoney(tx.price)}</td>
+        <td>USDT ${fmtMoney(tx.currentValue)}</td>
+        <td class="${tx.pnl < 0 ? 'neg' : 'pos'}">${tx.pnl < 0 ? '-' : '+'}USDT ${fmtMoney(Math.abs(tx.pnl))}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  },
+  
+  renderControls() {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    const start = (this.currentPage - 1) * this.rowsPerPage + 1;
+    const end = Math.min(start + this.rowsPerPage - 1, this.totalRows);
+    
+    let controlsHTML = `
+      <div class="pagination">
+        <div class="pagination-info">
+          Mostrando ${start}-${end} de ${this.totalRows} transacciones
+        </div>
+        <div class="pagination-controls">
+          <button onclick="TablePagination.goToPage(1)" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Primera
+          </button>
+          <button onclick="TablePagination.goToPage(${this.currentPage - 1})" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Anterior
+          </button>
+          <span style="padding: 0 12px; color: var(--text);">
+            Página ${this.currentPage} de ${totalPages}
+          </span>
+          <button onclick="TablePagination.goToPage(${this.currentPage + 1})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Siguiente
+          </button>
+          <button onclick="TablePagination.goToPage(${totalPages})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Última
+          </button>
+          <select onchange="TablePagination.changeRowsPerPage(this.value)" style="margin-left: 12px;">
+            <option value="10" ${this.rowsPerPage === 10 ? 'selected' : ''}>10 por página</option>
+            <option value="25" ${this.rowsPerPage === 25 ? 'selected' : ''}>25 por página</option>
+            <option value="50" ${this.rowsPerPage === 50 ? 'selected' : ''}>50 por página</option>
+            <option value="100" ${this.rowsPerPage === 100 ? 'selected' : ''}>100 por página</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    // Insertar o actualizar controles
+    let paginationContainer = document.querySelector('.pagination');
+    if (paginationContainer) {
+      paginationContainer.outerHTML = controlsHTML;
+    } else {
+      const tableWrap = document.querySelector('.table-wrap');
+      if (tableWrap) {
+        tableWrap.insertAdjacentHTML('beforeend', controlsHTML);
+      }
+    }
+  },
+  
+  goToPage(page) {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    
+    this.currentPage = page;
+    this.render();
+  },
+  
+  changeRowsPerPage(value) {
+    this.rowsPerPage = parseInt(value);
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  filter(filterFn) {
+    this.filteredData = this.filteredData.filter(filterFn);
+    this.totalRows = this.filteredData.length;
+    this.currentPage = 1;
+    this.render();
+  }
+};
+
+// ============================================
+// TOOLTIPS EXPLICATIVOS
+// ============================================
+
+const Tooltips = {
+  definitions: {
+    'HHI': {
+      title: 'Índice Herfindahl-Hirschman (HHI)',
+      description: 'Mide la concentración del portafolio. Valores cercanos a 0 indican alta diversificación, valores cercanos a 1 indican alta concentración en pocos activos.',
+      interpretation: (value) => {
+        if (value < 0.15) return 'Diversificación alta ✓';
+        if (value < 0.25) return 'Diversificación moderada';
+        return 'Concentración alta ⚠';
+      }
+    },
+    'ROI': {
+      title: 'Return on Investment (ROI)',
+      description: 'Retorno sobre inversión expresado como porcentaje. Indica la ganancia o pérdida relativa al capital invertido.',
+      interpretation: (value) => {
+        if (value > 0.1) return 'Rendimiento excelente ✓';
+        if (value > 0) return 'Rendimiento positivo';
+        return 'Pérdida actual ⚠';
+      }
+    },
+    'P&L': {
+      title: 'Profit & Loss (P&L)',
+      description: 'Ganancia o pérdida absoluta en USDT. Diferencia entre el valor actual del portafolio y el capital invertido.',
+      interpretation: (value) => {
+        if (value > 0) return 'En ganancia ✓';
+        if (value === 0) return 'En equilibrio';
+        return 'En pérdida ⚠';
+      }
+    },
+    'DCA': {
+      title: 'Dollar Cost Averaging',
+      description: 'Estrategia de inversión que consiste en comprar cantidades fijas de un activo a intervalos regulares, independientemente del precio.',
+      interpretation: () => 'Reduce el riesgo de volatilidad'
+    }
+  },
+  
+  addToElement(elementId, metricKey, currentValue = null) {
+    const element = document.getElementById(elementId);
+    if (!element || !this.definitions[metricKey]) return;
+    
+    const def = this.definitions[metricKey];
+    const parent = element.parentElement;
+    
+    // Crear wrapper con tooltip
+    const wrapper = document.createElement('span');
+    wrapper.className = 'tooltip';
+    wrapper.style.cursor = 'help';
+    
+    const tooltipText = document.createElement('span');
+    tooltipText.className = 'tooltiptext';
+    tooltipText.innerHTML = `
+      <strong>${def.title}</strong><br>
+      ${def.description}<br>
+      ${currentValue !== null ? `<br><em>${def.interpretation(currentValue)}</em>` : ''}
+    `;
+    
+    // Reemplazar elemento original con wrapper
+    parent.replaceChild(wrapper, element);
+    wrapper.appendChild(element);
+    wrapper.appendChild(tooltipText);
+  }
+};
+
+// ============================================
+// MEJORAS EN EVENTOS Y ACCESIBILIDAD
+// ============================================
+
+function enhanceAccessibility() {
+  // Agregar roles ARIA a secciones principales
+  document.querySelector('.topbar')?.setAttribute('role', 'banner');
+  document.querySelector('.kpis')?.setAttribute('role', 'region');
+  document.querySelector('.kpis')?.setAttribute('aria-label', 'Indicadores clave de rendimiento');
+  
+  // Mejorar navegación por teclado en botones
+  document.querySelectorAll('button, .pill').forEach(btn => {
+    if (!btn.hasAttribute('tabindex')) {
+      btn.setAttribute('tabindex', '0');
+    }
+    
+    // Agregar soporte para Enter y Space
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  });
+  
+  // Mejorar accesibilidad de gráficos
+  document.querySelectorAll('canvas').forEach(canvas => {
+    if (!canvas.hasAttribute('role')) {
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', 'Gráfico de visualización de datos');
+    }
+  });
+}
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+// Ejecutar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEnhancements);
+} else {
+  initEnhancements();
+}
+
+function initEnhancements() {
+  // Inicializar sistema de notificaciones
+  ToastManager.init();
+  
+  // Mejorar accesibilidad
+  enhanceAccessibility();
+  
+  // Agregar tooltips a métricas clave
+  // (Ejecutar después de que los datos se carguen)
+  
+  // Agregar botón de sincronización con Google Sheets
+  addSyncButton();
+  
+  console.log('✓ Mejoras del dashboard inicializadas correctamente');
+}
+
+function addSyncButton() {
+  const pills = document.querySelector('.pills');
+  if (!pills) return;
+  
+  // Crear botón de sincronización
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'pill primary';
+  syncBtn.id = 'syncBtn';
+  syncBtn.innerHTML = '🔄 Sincronizar Google Sheet';
+  syncBtn.setAttribute('aria-label', 'Sincronizar datos desde Google Sheets');
+  
+  syncBtn.addEventListener('click', async () => {
+    try {
+      await GoogleSheetsSync.sync();
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+    }
+  });
+  
+  // Insertar antes del botón de demo
+  const demoBtn = document.getElementById('demoBtn');
+  if (demoBtn) {
+    pills.insertBefore(syncBtn, demoBtn);
+  } else {
+    pills.appendChild(syncBtn);
+  }
+}
+
+// Exportar funciones globales
+window.ToastManager = ToastManager;
+window.GoogleSheetsSync = GoogleSheetsSync;
+window.TablePagination = TablePagination;
+window.Tooltips = Tooltips;
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.5.0/build/global/luxon.min.js">
+// Mejoras JavaScript para el Dashboard
+// Este código debe ser agregado al final del script en index.html
+
+// ============================================
+// SISTEMA DE NOTIFICACIONES TOAST
+// ============================================
+
+const ToastManager = {
+  container: null,
+  
+  init() {
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.className = 'toast-container';
+      this.container.setAttribute('role', 'region');
+      this.container.setAttribute('aria-label', 'Notificaciones');
+      document.body.appendChild(this.container);
+    }
+  },
+  
+  show(message, type = 'info', duration = 4000) {
+    this.init();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'polite');
+    
+    const icons = {
+      success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>',
+      error: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>',
+      info: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 10v4M10 6h.01"/></svg>',
+      loading: '<div class="spinner"></div>'
+    };
+    
+    toast.innerHTML = `
+      <div class="toast-icon">${icons[type] || icons.info}</div>
+      <div class="toast-message">${message}</div>
+      ${type !== 'loading' ? '<button class="toast-close" aria-label="Cerrar notificación">×</button>' : ''}
+    `;
+    
+    const closeBtn = toast.querySelector('.toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.remove(toast));
+    }
+    
+    this.container.appendChild(toast);
+    
+    if (duration > 0 && type !== 'loading') {
+      setTimeout(() => this.remove(toast), duration);
+    }
+    
+    return toast;
+  },
+  
+  remove(toast) {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  },
+  
+  success(message, duration) {
+    return this.show(message, 'success', duration);
+  },
+  
+  error(message, duration) {
+    return this.show(message, 'error', duration || 5000);
+  },
+  
+  info(message, duration) {
+    return this.show(message, 'info', duration);
+  },
+  
+  loading(message) {
+    return this.show(message, 'loading', 0);
+  }
+};
+
+// ============================================
+// SINCRONIZACIÓN CON GOOGLE SHEETS
+// ============================================
+
+const GoogleSheetsSync = {
+  // URL del CSV publicado desde Google Sheets
+  // Reemplazar con tu URL real después de publicar el Sheet
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?gid=0&single=true&output=csv',
+  
+  async sync() {
+    const loadingToast = ToastManager.loading('Sincronizando con Google Sheets...');
+    
+    try {
+      const response = await fetch(this.CSV_URL);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      const jsonData = this.parseCSV(csvText);
+      
+      // Cargar datos en el dashboard
+      loadData(jsonData);
+      
+      ToastManager.remove(loadingToast);
+      ToastManager.success('✓ Datos sincronizados correctamente');
+      
+      return jsonData;
+    } catch (error) {
+      console.error('Error al sincronizar:', error);
+      ToastManager.remove(loadingToast);
+      ToastManager.error('✗ Error al sincronizar con Google Sheets: ' + error.message);
+      throw error;
+    }
+  },
+  
+  parseCSV(csvText) {
+    // Parsear CSV y convertir a formato JSON esperado
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',');
+    
+    const transactions = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      const values = lines[i].split(',');
+      const transaction = {};
+      
+      headers.forEach((header, index) => {
+        transaction[header.trim()] = values[index]?.trim();
+      });
+      
+      transactions.push(transaction);
+    }
+    
+    // Calcular totales y métricas
+    return this.calculateMetrics(transactions);
+  },
+  
+  calculateMetrics(transactions) {
+    // Implementar lógica de cálculo de métricas
+    // Esta es una versión simplificada
+    const assets = {};
+    let totalInvested = 0;
+    let totalValue = 0;
+    
+    transactions.forEach(tx => {
+      const asset = tx.Activo || tx.asset;
+      const invested = parseFloat(tx['Inversión USDT'] || tx.usdt || 0);
+      const value = parseFloat(tx['Valor actual'] || tx.currentValue || 0);
+      
+      if (!assets[asset]) {
+        assets[asset] = { asset, invested: 0, value: 0, transactions: [] };
+      }
+      
+      assets[asset].invested += invested;
+      assets[asset].value += value;
+      assets[asset].transactions.push(tx);
+      
+      totalInvested += invested;
+      totalValue += value;
+    });
+    
+    const assetArray = Object.values(assets).map(a => ({
+      ...a,
+      pnl: a.value - a.invested,
+      roi: a.invested > 0 ? (a.value - a.invested) / a.invested : 0,
+      weight: totalValue > 0 ? a.value / totalValue : 0
+    }));
+    
+    return {
+      totals: {
+        invested: totalInvested,
+        value: totalValue,
+        pnl: totalValue - totalInvested,
+        roi: totalInvested > 0 ? (totalValue - totalInvested) / totalInvested : 0
+      },
+      goal: {
+        targetPnl: 5000
+      },
+      assets: assetArray,
+      transactions: transactions,
+      timeseries: {
+        portfolioCurve: [],
+        dailyReturns: []
+      }
+    };
+  }
+};
+
+// ============================================
+// PAGINACIÓN DE TABLA
+// ============================================
+
+const TablePagination = {
+  currentPage: 1,
+  rowsPerPage: 25,
+  totalRows: 0,
+  filteredData: [],
+  
+  init(data) {
+    this.filteredData = data;
+    this.totalRows = data.length;
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  render() {
+    const start = (this.currentPage - 1) * this.rowsPerPage;
+    const end = start + this.rowsPerPage;
+    const pageData = this.filteredData.slice(start, end);
+    
+    // Renderizar filas de la tabla
+    this.renderTableRows(pageData);
+    
+    // Actualizar controles de paginación
+    this.renderControls();
+  },
+  
+  renderTableRows(data) {
+    const tbody = document.querySelector('#txTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    data.forEach(tx => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${new Date(tx.date).toLocaleString('es', {dateStyle:'short', timeStyle:'short'})}</td>
+        <td><strong>${tx.asset}</strong></td>
+        <td>${tx.type}</td>
+        <td>USDT ${fmtMoney(tx.usdt)}</td>
+        <td>${tx.quantity.toFixed(6)}</td>
+        <td>USDT ${fmtMoney(tx.price)}</td>
+        <td>USDT ${fmtMoney(tx.currentValue)}</td>
+        <td class="${tx.pnl < 0 ? 'neg' : 'pos'}">${tx.pnl < 0 ? '-' : '+'}USDT ${fmtMoney(Math.abs(tx.pnl))}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  },
+  
+  renderControls() {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    const start = (this.currentPage - 1) * this.rowsPerPage + 1;
+    const end = Math.min(start + this.rowsPerPage - 1, this.totalRows);
+    
+    let controlsHTML = `
+      <div class="pagination">
+        <div class="pagination-info">
+          Mostrando ${start}-${end} de ${this.totalRows} transacciones
+        </div>
+        <div class="pagination-controls">
+          <button onclick="TablePagination.goToPage(1)" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Primera
+          </button>
+          <button onclick="TablePagination.goToPage(${this.currentPage - 1})" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Anterior
+          </button>
+          <span style="padding: 0 12px; color: var(--text);">
+            Página ${this.currentPage} de ${totalPages}
+          </span>
+          <button onclick="TablePagination.goToPage(${this.currentPage + 1})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Siguiente
+          </button>
+          <button onclick="TablePagination.goToPage(${totalPages})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Última
+          </button>
+          <select onchange="TablePagination.changeRowsPerPage(this.value)" style="margin-left: 12px;">
+            <option value="10" ${this.rowsPerPage === 10 ? 'selected' : ''}>10 por página</option>
+            <option value="25" ${this.rowsPerPage === 25 ? 'selected' : ''}>25 por página</option>
+            <option value="50" ${this.rowsPerPage === 50 ? 'selected' : ''}>50 por página</option>
+            <option value="100" ${this.rowsPerPage === 100 ? 'selected' : ''}>100 por página</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    // Insertar o actualizar controles
+    let paginationContainer = document.querySelector('.pagination');
+    if (paginationContainer) {
+      paginationContainer.outerHTML = controlsHTML;
+    } else {
+      const tableWrap = document.querySelector('.table-wrap');
+      if (tableWrap) {
+        tableWrap.insertAdjacentHTML('beforeend', controlsHTML);
+      }
+    }
+  },
+  
+  goToPage(page) {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    
+    this.currentPage = page;
+    this.render();
+  },
+  
+  changeRowsPerPage(value) {
+    this.rowsPerPage = parseInt(value);
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  filter(filterFn) {
+    this.filteredData = this.filteredData.filter(filterFn);
+    this.totalRows = this.filteredData.length;
+    this.currentPage = 1;
+    this.render();
+  }
+};
+
+// ============================================
+// TOOLTIPS EXPLICATIVOS
+// ============================================
+
+const Tooltips = {
+  definitions: {
+    'HHI': {
+      title: 'Índice Herfindahl-Hirschman (HHI)',
+      description: 'Mide la concentración del portafolio. Valores cercanos a 0 indican alta diversificación, valores cercanos a 1 indican alta concentración en pocos activos.',
+      interpretation: (value) => {
+        if (value < 0.15) return 'Diversificación alta ✓';
+        if (value < 0.25) return 'Diversificación moderada';
+        return 'Concentración alta ⚠';
+      }
+    },
+    'ROI': {
+      title: 'Return on Investment (ROI)',
+      description: 'Retorno sobre inversión expresado como porcentaje. Indica la ganancia o pérdida relativa al capital invertido.',
+      interpretation: (value) => {
+        if (value > 0.1) return 'Rendimiento excelente ✓';
+        if (value > 0) return 'Rendimiento positivo';
+        return 'Pérdida actual ⚠';
+      }
+    },
+    'P&L': {
+      title: 'Profit & Loss (P&L)',
+      description: 'Ganancia o pérdida absoluta en USDT. Diferencia entre el valor actual del portafolio y el capital invertido.',
+      interpretation: (value) => {
+        if (value > 0) return 'En ganancia ✓';
+        if (value === 0) return 'En equilibrio';
+        return 'En pérdida ⚠';
+      }
+    },
+    'DCA': {
+      title: 'Dollar Cost Averaging',
+      description: 'Estrategia de inversión que consiste en comprar cantidades fijas de un activo a intervalos regulares, independientemente del precio.',
+      interpretation: () => 'Reduce el riesgo de volatilidad'
+    }
+  },
+  
+  addToElement(elementId, metricKey, currentValue = null) {
+    const element = document.getElementById(elementId);
+    if (!element || !this.definitions[metricKey]) return;
+    
+    const def = this.definitions[metricKey];
+    const parent = element.parentElement;
+    
+    // Crear wrapper con tooltip
+    const wrapper = document.createElement('span');
+    wrapper.className = 'tooltip';
+    wrapper.style.cursor = 'help';
+    
+    const tooltipText = document.createElement('span');
+    tooltipText.className = 'tooltiptext';
+    tooltipText.innerHTML = `
+      <strong>${def.title}</strong><br>
+      ${def.description}<br>
+      ${currentValue !== null ? `<br><em>${def.interpretation(currentValue)}</em>` : ''}
+    `;
+    
+    // Reemplazar elemento original con wrapper
+    parent.replaceChild(wrapper, element);
+    wrapper.appendChild(element);
+    wrapper.appendChild(tooltipText);
+  }
+};
+
+// ============================================
+// MEJORAS EN EVENTOS Y ACCESIBILIDAD
+// ============================================
+
+function enhanceAccessibility() {
+  // Agregar roles ARIA a secciones principales
+  document.querySelector('.topbar')?.setAttribute('role', 'banner');
+  document.querySelector('.kpis')?.setAttribute('role', 'region');
+  document.querySelector('.kpis')?.setAttribute('aria-label', 'Indicadores clave de rendimiento');
+  
+  // Mejorar navegación por teclado en botones
+  document.querySelectorAll('button, .pill').forEach(btn => {
+    if (!btn.hasAttribute('tabindex')) {
+      btn.setAttribute('tabindex', '0');
+    }
+    
+    // Agregar soporte para Enter y Space
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  });
+  
+  // Mejorar accesibilidad de gráficos
+  document.querySelectorAll('canvas').forEach(canvas => {
+    if (!canvas.hasAttribute('role')) {
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', 'Gráfico de visualización de datos');
+    }
+  });
+}
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+// Ejecutar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEnhancements);
+} else {
+  initEnhancements();
+}
+
+function initEnhancements() {
+  // Inicializar sistema de notificaciones
+  ToastManager.init();
+  
+  // Mejorar accesibilidad
+  enhanceAccessibility();
+  
+  // Agregar tooltips a métricas clave
+  // (Ejecutar después de que los datos se carguen)
+  
+  // Agregar botón de sincronización con Google Sheets
+  addSyncButton();
+  
+  console.log('✓ Mejoras del dashboard inicializadas correctamente');
+}
+
+function addSyncButton() {
+  const pills = document.querySelector('.pills');
+  if (!pills) return;
+  
+  // Crear botón de sincronización
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'pill primary';
+  syncBtn.id = 'syncBtn';
+  syncBtn.innerHTML = '🔄 Sincronizar Google Sheet';
+  syncBtn.setAttribute('aria-label', 'Sincronizar datos desde Google Sheets');
+  
+  syncBtn.addEventListener('click', async () => {
+    try {
+      await GoogleSheetsSync.sync();
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+    }
+  });
+  
+  // Insertar antes del botón de demo
+  const demoBtn = document.getElementById('demoBtn');
+  if (demoBtn) {
+    pills.insertBefore(syncBtn, demoBtn);
+  } else {
+    pills.appendChild(syncBtn);
+  }
+}
+
+// Exportar funciones globales
+window.ToastManager = ToastManager;
+window.GoogleSheetsSync = GoogleSheetsSync;
+window.TablePagination = TablePagination;
+window.Tooltips = Tooltips;
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js">
+// Mejoras JavaScript para el Dashboard
+// Este código debe ser agregado al final del script en index.html
+
+// ============================================
+// SISTEMA DE NOTIFICACIONES TOAST
+// ============================================
+
+const ToastManager = {
+  container: null,
+  
+  init() {
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.className = 'toast-container';
+      this.container.setAttribute('role', 'region');
+      this.container.setAttribute('aria-label', 'Notificaciones');
+      document.body.appendChild(this.container);
+    }
+  },
+  
+  show(message, type = 'info', duration = 4000) {
+    this.init();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'polite');
+    
+    const icons = {
+      success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>',
+      error: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>',
+      info: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 10v4M10 6h.01"/></svg>',
+      loading: '<div class="spinner"></div>'
+    };
+    
+    toast.innerHTML = `
+      <div class="toast-icon">${icons[type] || icons.info}</div>
+      <div class="toast-message">${message}</div>
+      ${type !== 'loading' ? '<button class="toast-close" aria-label="Cerrar notificación">×</button>' : ''}
+    `;
+    
+    const closeBtn = toast.querySelector('.toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.remove(toast));
+    }
+    
+    this.container.appendChild(toast);
+    
+    if (duration > 0 && type !== 'loading') {
+      setTimeout(() => this.remove(toast), duration);
+    }
+    
+    return toast;
+  },
+  
+  remove(toast) {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  },
+  
+  success(message, duration) {
+    return this.show(message, 'success', duration);
+  },
+  
+  error(message, duration) {
+    return this.show(message, 'error', duration || 5000);
+  },
+  
+  info(message, duration) {
+    return this.show(message, 'info', duration);
+  },
+  
+  loading(message) {
+    return this.show(message, 'loading', 0);
+  }
+};
+
+// ============================================
+// SINCRONIZACIÓN CON GOOGLE SHEETS
+// ============================================
+
+const GoogleSheetsSync = {
+  // URL del CSV publicado desde Google Sheets
+  // Reemplazar con tu URL real después de publicar el Sheet
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?gid=0&single=true&output=csv',
+  
+  async sync() {
+    const loadingToast = ToastManager.loading('Sincronizando con Google Sheets...');
+    
+    try {
+      const response = await fetch(this.CSV_URL);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      const jsonData = this.parseCSV(csvText);
+      
+      // Cargar datos en el dashboard
+      loadData(jsonData);
+      
+      ToastManager.remove(loadingToast);
+      ToastManager.success('✓ Datos sincronizados correctamente');
+      
+      return jsonData;
+    } catch (error) {
+      console.error('Error al sincronizar:', error);
+      ToastManager.remove(loadingToast);
+      ToastManager.error('✗ Error al sincronizar con Google Sheets: ' + error.message);
+      throw error;
+    }
+  },
+  
+  parseCSV(csvText) {
+    // Parsear CSV y convertir a formato JSON esperado
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',');
+    
+    const transactions = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      const values = lines[i].split(',');
+      const transaction = {};
+      
+      headers.forEach((header, index) => {
+        transaction[header.trim()] = values[index]?.trim();
+      });
+      
+      transactions.push(transaction);
+    }
+    
+    // Calcular totales y métricas
+    return this.calculateMetrics(transactions);
+  },
+  
+  calculateMetrics(transactions) {
+    // Implementar lógica de cálculo de métricas
+    // Esta es una versión simplificada
+    const assets = {};
+    let totalInvested = 0;
+    let totalValue = 0;
+    
+    transactions.forEach(tx => {
+      const asset = tx.Activo || tx.asset;
+      const invested = parseFloat(tx['Inversión USDT'] || tx.usdt || 0);
+      const value = parseFloat(tx['Valor actual'] || tx.currentValue || 0);
+      
+      if (!assets[asset]) {
+        assets[asset] = { asset, invested: 0, value: 0, transactions: [] };
+      }
+      
+      assets[asset].invested += invested;
+      assets[asset].value += value;
+      assets[asset].transactions.push(tx);
+      
+      totalInvested += invested;
+      totalValue += value;
+    });
+    
+    const assetArray = Object.values(assets).map(a => ({
+      ...a,
+      pnl: a.value - a.invested,
+      roi: a.invested > 0 ? (a.value - a.invested) / a.invested : 0,
+      weight: totalValue > 0 ? a.value / totalValue : 0
+    }));
+    
+    return {
+      totals: {
+        invested: totalInvested,
+        value: totalValue,
+        pnl: totalValue - totalInvested,
+        roi: totalInvested > 0 ? (totalValue - totalInvested) / totalInvested : 0
+      },
+      goal: {
+        targetPnl: 5000
+      },
+      assets: assetArray,
+      transactions: transactions,
+      timeseries: {
+        portfolioCurve: [],
+        dailyReturns: []
+      }
+    };
+  }
+};
+
+// ============================================
+// PAGINACIÓN DE TABLA
+// ============================================
+
+const TablePagination = {
+  currentPage: 1,
+  rowsPerPage: 25,
+  totalRows: 0,
+  filteredData: [],
+  
+  init(data) {
+    this.filteredData = data;
+    this.totalRows = data.length;
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  render() {
+    const start = (this.currentPage - 1) * this.rowsPerPage;
+    const end = start + this.rowsPerPage;
+    const pageData = this.filteredData.slice(start, end);
+    
+    // Renderizar filas de la tabla
+    this.renderTableRows(pageData);
+    
+    // Actualizar controles de paginación
+    this.renderControls();
+  },
+  
+  renderTableRows(data) {
+    const tbody = document.querySelector('#txTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    data.forEach(tx => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${new Date(tx.date).toLocaleString('es', {dateStyle:'short', timeStyle:'short'})}</td>
+        <td><strong>${tx.asset}</strong></td>
+        <td>${tx.type}</td>
+        <td>USDT ${fmtMoney(tx.usdt)}</td>
+        <td>${tx.quantity.toFixed(6)}</td>
+        <td>USDT ${fmtMoney(tx.price)}</td>
+        <td>USDT ${fmtMoney(tx.currentValue)}</td>
+        <td class="${tx.pnl < 0 ? 'neg' : 'pos'}">${tx.pnl < 0 ? '-' : '+'}USDT ${fmtMoney(Math.abs(tx.pnl))}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  },
+  
+  renderControls() {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    const start = (this.currentPage - 1) * this.rowsPerPage + 1;
+    const end = Math.min(start + this.rowsPerPage - 1, this.totalRows);
+    
+    let controlsHTML = `
+      <div class="pagination">
+        <div class="pagination-info">
+          Mostrando ${start}-${end} de ${this.totalRows} transacciones
+        </div>
+        <div class="pagination-controls">
+          <button onclick="TablePagination.goToPage(1)" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Primera
+          </button>
+          <button onclick="TablePagination.goToPage(${this.currentPage - 1})" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Anterior
+          </button>
+          <span style="padding: 0 12px; color: var(--text);">
+            Página ${this.currentPage} de ${totalPages}
+          </span>
+          <button onclick="TablePagination.goToPage(${this.currentPage + 1})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Siguiente
+          </button>
+          <button onclick="TablePagination.goToPage(${totalPages})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Última
+          </button>
+          <select onchange="TablePagination.changeRowsPerPage(this.value)" style="margin-left: 12px;">
+            <option value="10" ${this.rowsPerPage === 10 ? 'selected' : ''}>10 por página</option>
+            <option value="25" ${this.rowsPerPage === 25 ? 'selected' : ''}>25 por página</option>
+            <option value="50" ${this.rowsPerPage === 50 ? 'selected' : ''}>50 por página</option>
+            <option value="100" ${this.rowsPerPage === 100 ? 'selected' : ''}>100 por página</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    // Insertar o actualizar controles
+    let paginationContainer = document.querySelector('.pagination');
+    if (paginationContainer) {
+      paginationContainer.outerHTML = controlsHTML;
+    } else {
+      const tableWrap = document.querySelector('.table-wrap');
+      if (tableWrap) {
+        tableWrap.insertAdjacentHTML('beforeend', controlsHTML);
+      }
+    }
+  },
+  
+  goToPage(page) {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    
+    this.currentPage = page;
+    this.render();
+  },
+  
+  changeRowsPerPage(value) {
+    this.rowsPerPage = parseInt(value);
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  filter(filterFn) {
+    this.filteredData = this.filteredData.filter(filterFn);
+    this.totalRows = this.filteredData.length;
+    this.currentPage = 1;
+    this.render();
+  }
+};
+
+// ============================================
+// TOOLTIPS EXPLICATIVOS
+// ============================================
+
+const Tooltips = {
+  definitions: {
+    'HHI': {
+      title: 'Índice Herfindahl-Hirschman (HHI)',
+      description: 'Mide la concentración del portafolio. Valores cercanos a 0 indican alta diversificación, valores cercanos a 1 indican alta concentración en pocos activos.',
+      interpretation: (value) => {
+        if (value < 0.15) return 'Diversificación alta ✓';
+        if (value < 0.25) return 'Diversificación moderada';
+        return 'Concentración alta ⚠';
+      }
+    },
+    'ROI': {
+      title: 'Return on Investment (ROI)',
+      description: 'Retorno sobre inversión expresado como porcentaje. Indica la ganancia o pérdida relativa al capital invertido.',
+      interpretation: (value) => {
+        if (value > 0.1) return 'Rendimiento excelente ✓';
+        if (value > 0) return 'Rendimiento positivo';
+        return 'Pérdida actual ⚠';
+      }
+    },
+    'P&L': {
+      title: 'Profit & Loss (P&L)',
+      description: 'Ganancia o pérdida absoluta en USDT. Diferencia entre el valor actual del portafolio y el capital invertido.',
+      interpretation: (value) => {
+        if (value > 0) return 'En ganancia ✓';
+        if (value === 0) return 'En equilibrio';
+        return 'En pérdida ⚠';
+      }
+    },
+    'DCA': {
+      title: 'Dollar Cost Averaging',
+      description: 'Estrategia de inversión que consiste en comprar cantidades fijas de un activo a intervalos regulares, independientemente del precio.',
+      interpretation: () => 'Reduce el riesgo de volatilidad'
+    }
+  },
+  
+  addToElement(elementId, metricKey, currentValue = null) {
+    const element = document.getElementById(elementId);
+    if (!element || !this.definitions[metricKey]) return;
+    
+    const def = this.definitions[metricKey];
+    const parent = element.parentElement;
+    
+    // Crear wrapper con tooltip
+    const wrapper = document.createElement('span');
+    wrapper.className = 'tooltip';
+    wrapper.style.cursor = 'help';
+    
+    const tooltipText = document.createElement('span');
+    tooltipText.className = 'tooltiptext';
+    tooltipText.innerHTML = `
+      <strong>${def.title}</strong><br>
+      ${def.description}<br>
+      ${currentValue !== null ? `<br><em>${def.interpretation(currentValue)}</em>` : ''}
+    `;
+    
+    // Reemplazar elemento original con wrapper
+    parent.replaceChild(wrapper, element);
+    wrapper.appendChild(element);
+    wrapper.appendChild(tooltipText);
+  }
+};
+
+// ============================================
+// MEJORAS EN EVENTOS Y ACCESIBILIDAD
+// ============================================
+
+function enhanceAccessibility() {
+  // Agregar roles ARIA a secciones principales
+  document.querySelector('.topbar')?.setAttribute('role', 'banner');
+  document.querySelector('.kpis')?.setAttribute('role', 'region');
+  document.querySelector('.kpis')?.setAttribute('aria-label', 'Indicadores clave de rendimiento');
+  
+  // Mejorar navegación por teclado en botones
+  document.querySelectorAll('button, .pill').forEach(btn => {
+    if (!btn.hasAttribute('tabindex')) {
+      btn.setAttribute('tabindex', '0');
+    }
+    
+    // Agregar soporte para Enter y Space
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  });
+  
+  // Mejorar accesibilidad de gráficos
+  document.querySelectorAll('canvas').forEach(canvas => {
+    if (!canvas.hasAttribute('role')) {
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', 'Gráfico de visualización de datos');
+    }
+  });
+}
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+// Ejecutar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEnhancements);
+} else {
+  initEnhancements();
+}
+
+function initEnhancements() {
+  // Inicializar sistema de notificaciones
+  ToastManager.init();
+  
+  // Mejorar accesibilidad
+  enhanceAccessibility();
+  
+  // Agregar tooltips a métricas clave
+  // (Ejecutar después de que los datos se carguen)
+  
+  // Agregar botón de sincronización con Google Sheets
+  addSyncButton();
+  
+  console.log('✓ Mejoras del dashboard inicializadas correctamente');
+}
+
+function addSyncButton() {
+  const pills = document.querySelector('.pills');
+  if (!pills) return;
+  
+  // Crear botón de sincronización
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'pill primary';
+  syncBtn.id = 'syncBtn';
+  syncBtn.innerHTML = '🔄 Sincronizar Google Sheet';
+  syncBtn.setAttribute('aria-label', 'Sincronizar datos desde Google Sheets');
+  
+  syncBtn.addEventListener('click', async () => {
+    try {
+      await GoogleSheetsSync.sync();
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+    }
+  });
+  
+  // Insertar antes del botón de demo
+  const demoBtn = document.getElementById('demoBtn');
+  if (demoBtn) {
+    pills.insertBefore(syncBtn, demoBtn);
+  } else {
+    pills.appendChild(syncBtn);
+  }
+}
+
+// Exportar funciones globales
+window.ToastManager = ToastManager;
+window.GoogleSheetsSync = GoogleSheetsSync;
+window.TablePagination = TablePagination;
+window.Tooltips = Tooltips;
+
+</script>
+
+<style>
+:root{
+  --bg0:#070A12;
+  --bg1:#0A1020;
+  --panel:#0f172a99;
+  --panel2:#0b122799;
+  --stroke:#ffffff12;
+  --stroke2:#ffffff1f;
+  --text:#EAF0FF;
+  --muted:#B8C5E0;
+  --muted2:#8A98BE;
+  --good:#27F5B7;
+  --bad:#FF5A85;
+  --warn:#FFB020;
+  --accent:#7A47F3;
+  --accent2:#4BC0FF;
+  --shadow: 0 20px 60px rgba(0,0,0,.45);
+  --radius:18px;
+  --radius2:26px;
+  --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}
+[data-theme="light"]{
+  --bg0:#F6F7FB;
+  --bg1:#EEF2FF;
+  --panel:#ffffffcc;
+  --panel2:#ffffffd6;
+  --stroke:#00000012;
+  --stroke2:#0000001f;
+  --text:#0B1020;
+  --muted:#3F4B6A;
+  --muted2:#5B688B;
+  --shadow: 0 16px 40px rgba(15,23,42,.16);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:var(--font);
+  color:var(--text);
+  background:
+    radial-gradient(900px 500px at 12% 10%, rgba(122,71,243,.35), transparent 55%),
+    radial-gradient(900px 500px at 80% 0%, rgba(75,192,255,.22), transparent 55%),
+    radial-gradient(900px 500px at 90% 70%, rgba(39,245,183,.12), transparent 55%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  overflow-x:hidden;
+}
+
+.container{max-width:1240px;margin:26px auto 40px;padding:0 18px}
+.topbar{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:14px 16px; border:1px solid var(--stroke); border-radius:var(--radius2);
+  background:linear-gradient(180deg, var(--panel), var(--panel2));
+  box-shadow:var(--shadow);
+  backdrop-filter: blur(14px);
+}
+.brand{display:flex; align-items:center; gap:12px; min-width:240px}
+.logo{
+  width:34px;height:34px;border-radius:12px;
+  background: conic-gradient(from 210deg, var(--accent), var(--accent2), var(--good), var(--accent));
+  box-shadow:0 0 0 6px rgba(122,71,243,.12);
+}
+.brand h1{font-size:13px; margin:0; letter-spacing:.6px; font-weight:800}
+.brand p{margin:2px 0 0; font-size:12px; color:var(--muted)}
+.pills{display:flex;flex-wrap:wrap; gap:10px; justify-content:flex-end}
+.pill{
+  position:relative;
+  border:1px solid var(--stroke2);
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  color:var(--text);
+  padding:9px 12px;
+  border-radius:999px;
+  font-size:12px;
+  display:inline-flex; align-items:center; gap:8px;
+  cursor:pointer; user-select:none;
+  transition: transform .12s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+}
+.pill:hover{transform: translateY(-1px); border-color: rgba(122,71,243,.55); box-shadow:0 14px 32px rgba(0,0,0,.22)}
+.pill:active{transform: translateY(0px) scale(.98)}
+.pill.primary{
+  background:linear-gradient(135deg, rgba(122,71,243,.28), rgba(75,192,255,.16));
+  border-color: rgba(122,71,243,.55);
+}
+.pill .dot{
+  width:8px;height:8px;border-radius:50%;
+  background: var(--good);
+  box-shadow:0 0 0 6px rgba(39,245,183,.12);
+}
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 10px; border-radius:999px;
+  border:1px solid var(--stroke2);
+  background:rgba(0,0,0,.10);
+  color:var(--muted);
+  font-size:12px;
+}
+
+.grid{display:grid; gap:16px; margin-top:16px}
+.kpis{grid-template-columns:repeat(6, minmax(0,1fr))}
+.card{
+  border:1px solid var(--stroke);
+  border-radius:var(--radius);
+  background:linear-gradient(180deg, var(--panel), var(--panel2));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+.kpi{padding:14px}
+.kpi .label{font-size:11px; letter-spacing:.5px; color:var(--muted); text-transform:uppercase}
+.kpi .value{font-size:22px; font-weight:900; margin-top:6px}
+.kpi .sub{font-size:12px; color:var(--muted2); margin-top:4px}
+.kpi .value.good{color:var(--good)}
+.kpi .value.bad{color:var(--bad)}
+
+.hero{padding:18px}
+.hero h2{margin:0; font-size:28px; letter-spacing:.2px}
+.hero p{margin:6px 0 0; color:var(--muted); font-size:13px}
+.section-title{display:flex; align-items:center; justify-content:space-between; padding:14px 16px 0}
+.section-title h3{margin:0; font-size:13px; letter-spacing:.5px; text-transform:uppercase; color:var(--muted)}
+.section-title .actions{display:flex; gap:8px; align-items:center}
+
+.row2{grid-template-columns: 1.1fr .9fr}
+.row3{grid-template-columns: 1fr 1fr}
+.row4{grid-template-columns: 1.2fr .8fr}
+.pad{padding:14px 16px 16px}
+
+.canvas-wrap{height:310px}
+.canvas-wrap.sm{height:260px}
+canvas{width:100%!important;height:100%!important}
+
+.time-tabs{display:flex; gap:8px; align-items:center}
+.time-tabs button{
+  border:1px solid var(--stroke2);
+  background: rgba(255,255,255,.04);
+  color:var(--text);
+  padding:7px 10px;
+  border-radius:999px;
+  font-size:12px;
+  cursor:pointer;
+  transition: all .15s ease;
+}
+.time-tabs button:hover{border-color: rgba(122,71,243,.55); transform: translateY(-1px)}
+.time-tabs button.active{
+  background: linear-gradient(135deg, rgba(122,71,243,.38), rgba(75,192,255,.18));
+  border-color: rgba(122,71,243,.75);
+}
+
+.goal-grid{display:grid; grid-template-columns: 1fr 1fr; gap:14px; align-items:center}
+.goal-metrics{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+.mini{padding:12px;border-radius:14px;border:1px solid var(--stroke);background:rgba(0,0,0,.10)}
+.mini .t{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.45px}
+.mini .v{margin-top:6px;font-weight:900;font-size:20px}
+.mini .v.good{color:var(--good)}
+.mini .v.bad{color:var(--bad)}
+
+.neg{color:var(--bad); font-weight:900}
+.pos{color:var(--good); font-weight:900}
+
+.table-wrap{overflow:auto;border-radius:14px;border:1px solid var(--stroke);background:rgba(0,0,0,.08)}
+table{width:100%; border-collapse:collapse; min-width:860px}
+th,td{padding:10px 12px; border-bottom:1px solid var(--stroke); font-size:13px; text-align:left; white-space:nowrap}
+th{position:sticky; top:0; background:rgba(0,0,0,.18); backdrop-filter: blur(10px); cursor:pointer; color:var(--muted)}
+[data-theme="light"] th{background:rgba(255,255,255,.6)}
+tr:hover td{background:rgba(122,71,243,.06)}
+.filters{display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:0 16px 12px}
+select,input{
+  border:1px solid var(--stroke2);
+  background: rgba(255,255,255,.04);
+  color:var(--text);
+  padding:9px 10px;
+  border-radius:12px;
+  outline:none;
+}
+[data-theme="light"] select,[data-theme="light"] input{background: rgba(0,0,0,.03)}
+.smallnote{font-size:12px;color:var(--muted);padding:10px 16px 14px}
+.footer{margin-top:18px; text-align:center; color:var(--muted2); font-size:12px}
+.footer strong{color:var(--text)}
+
+@media (max-width:1100px){
+  .kpis{grid-template-columns:repeat(3, minmax(0,1fr))}
+  .row2,.row3,.row4{grid-template-columns:1fr}
+  .canvas-wrap{height:280px}
+}
+
+/* ============================================
+   MEJORAS CSS PARA DASHBOARD DE CRIPTOMONEDAS
+   ============================================ */
+
+/* Tooltips */
+.tooltip {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 280px;
+  background-color: var(--panel);
+  color: var(--text);
+  text-align: left;
+  border-radius: 12px;
+  padding: 12px;
+  position: absolute;
+  z-index: 1000;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -140px;
+  opacity: 0;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  border: 1px solid var(--stroke2);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.6;
+  backdrop-filter: blur(14px);
+}
+
+.tooltip .tooltiptext::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -6px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: var(--panel) transparent transparent transparent;
+}
+
+.tooltip:hover .tooltiptext,
+.tooltip:focus .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--stroke2);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideIn 0.3s ease;
+  backdrop-filter: blur(14px);
+  pointer-events: all;
+  min-width: 300px;
+}
+
+.toast.success {
+  border-left: 4px solid var(--good);
+}
+
+.toast.error {
+  border-left: 4px solid var(--bad);
+}
+
+.toast.info {
+  border-left: 4px solid var(--accent2);
+}
+
+.toast.loading {
+  border-left: 4px solid var(--warn);
+}
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.toast.success .toast-icon {
+  color: var(--good);
+}
+
+.toast.error .toast-icon {
+  color: var(--bad);
+}
+
+.toast.info .toast-icon {
+  color: var(--accent2);
+}
+
+.toast.loading .toast-icon {
+  color: var(--warn);
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 20px;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Spinner */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--stroke2);
+  border-top-color: var(--accent2);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mejoras en botones activos */
+.time-tabs button.active {
+  background: linear-gradient(135deg, rgba(122, 71, 243, 0.5), rgba(75, 192, 255, 0.25));
+  border-color: rgba(122, 71, 243, 0.9);
+  border-width: 2px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 3px rgba(122, 71, 243, 0.15);
+  font-weight: 600;
+}
+
+.time-tabs button.active:hover {
+  transform: translateY(0);
+}
+
+/* Paginación */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--stroke);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .pagination {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.pagination-info {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pagination-controls button {
+  padding: 6px 12px;
+  border: 1px solid var(--stroke2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+[data-theme="light"] .pagination-controls button {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.pagination-controls button:hover:not(:disabled) {
+  border-color: rgba(122, 71, 243, 0.55);
+  transform: translateY(-1px);
+  background: rgba(122, 71, 243, 0.1);
+}
+
+.pagination-controls button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.pagination-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-controls select {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--stroke2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme="light"] .pagination-controls select {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.pagination-controls select:hover {
+  border-color: rgba(122, 71, 243, 0.55);
+}
+
+/* Focus visible para accesibilidad */
+*:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+.pill:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 2px;
+}
+
+/* Skip to content link para accesibilidad */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent);
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 0 0 8px 0;
+  z-index: 10001;
+  transition: top 0.3s ease;
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* Mejoras en KPIs - Jerarquía visual */
+.kpi.primary {
+  grid-column: span 2;
+}
+
+.kpi.primary .value {
+  font-size: 32px;
+}
+
+.kpi.secondary .value {
+  font-size: 24px;
+}
+
+.kpi.tertiary .value {
+  font-size: 20px;
+}
+
+/* Animaciones suaves para cambios de valores */
+.kpi .value {
+  transition: color 0.3s ease;
+}
+
+/* Loading state para botones */
+.pill.loading {
+  pointer-events: none;
+  opacity: 0.7;
+  position: relative;
+}
+
+.pill.loading::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--stroke2);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Mejoras en tabla */
+table th {
+  user-select: none;
+  position: relative;
+}
+
+table th:hover {
+  background: rgba(122, 71, 243, 0.1);
+}
+
+table th.sortable::after {
+  content: "⇅";
+  position: absolute;
+  right: 8px;
+  opacity: 0.3;
+  font-size: 10px;
+}
+
+table th.sorted-asc::after {
+  content: "↑";
+  opacity: 1;
+  color: var(--accent2);
+}
+
+table th.sorted-desc::after {
+  content: "↓";
+  opacity: 1;
+  color: var(--accent2);
+}
+
+/* Búsqueda en tabla */
+.table-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.table-search input {
+  width: 100%;
+  max-width: 400px;
+  padding: 10px 12px;
+  padding-left: 36px;
+  border: 1px solid var(--stroke2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 12px;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+[data-theme="light"] .table-search input {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.table-search input:focus {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 3px rgba(75, 192, 255, 0.1);
+}
+
+.table-search-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  max-width: 400px;
+}
+
+.table-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .brand {
+    min-width: auto;
+    justify-content: center;
+  }
+
+  .pills {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .pill {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+
+  .toast-container {
+    left: 10px;
+    right: 10px;
+    max-width: none;
+  }
+
+  .toast {
+    min-width: auto;
+  }
+
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-controls {
+    justify-content: center;
+  }
+
+  .tooltip .tooltiptext {
+    width: 240px;
+    margin-left: -120px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pagination-controls button {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .pagination-controls span {
+    font-size: 11px;
+  }
+
+  .toast {
+    padding: 12px 16px;
+  }
+
+  .toast-message {
+    font-size: 12px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .topbar .pills,
+  .pagination,
+  .filters,
+  .toast-container {
+    display: none !important;
+  }
+
+  .card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Animaciones adicionales */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.card {
+  animation: scaleIn 0.3s ease;
+}
+
+/* Estados de carga */
+.loading-skeleton {
+  background: linear-gradient(90deg, var(--panel) 25%, var(--panel2) 50%, var(--panel) 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+  border-radius: 8px;
+  height: 20px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Mejoras en iconos SVG */
+.pill svg,
+.toast-icon svg {
+  vertical-align: middle;
+}
+
+/* Estados hover mejorados */
+.card:hover {
+  transform: translateY(-2px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.5);
+}
+
+/* Indicador de sincronización */
+.sync-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.sync-indicator.syncing {
+  color: var(--warn);
+}
+
+.sync-indicator.success {
+  color: var(--good);
+}
+
+.sync-indicator.error {
+  color: var(--bad);
+}
+
+/* Mejoras en accesibilidad de color */
+[data-theme="light"] .muted {
+  color: #3F4B6A;
+}
+
+[data-theme="light"] .muted2 {
+  color: #5B688B;
+}
+
+/* Alto contraste para valores importantes */
+.kpi .value {
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+/* Separador visual */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--stroke), transparent);
+  margin: 24px 0;
+}
+
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>HEIDY · CRYPTO PORTFOLIO</h1>
+        <p>Dashboard tipo Power BI · HTML Premium · Gestión 2026</p>
+      </div>
+    </div>
+
+    <div class="pills">
+      <span class="badge"><span class="dot"></span> <span id="statusText">En línea</span></span>
+      <label class="pill primary" for="fileInput">📁 Cargar JSON</label>
+      <input id="fileInput" type="file" accept=".json,application/json" style="display:none"/>
+      <button class="pill" id="demoBtn">✨ Usar demo</button>
+      <button class="pill" id="exportBtn">⬇️ Exportar JSON</button>
+      <button class="pill" id="printBtn">🖨️ Imprimir</button>
+      <button class="pill primary" id="themeBtn">🌙 Dark/Light</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card hero">
+      <h2>Portafolio Crypto</h2>
+      <p>Sincronizado por JSON (Google Sheets) · Última carga: <span id="lastLoad">—</span></p>
+    </div>
+
+    <div class="grid kpis">
+      <div class="card kpi">
+        <div class="label">Total invertido</div>
+        <div class="value" id="kpiInvested">—</div>
+        <div class="sub">USDT</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Valor actual</div>
+        <div class="value" id="kpiValue">—</div>
+        <div class="sub">USDT</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">P&amp;L total</div>
+        <div class="value" id="kpiPnL">—</div>
+        <div class="sub" id="kpiRoi">—</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Activos</div>
+        <div class="value" id="kpiAssets">—</div>
+        <div class="sub">Diferentes</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Transacciones</div>
+        <div class="value" id="kpiTx">—</div>
+        <div class="sub">Total</div>
+      </div>
+      <div class="card kpi">
+        <div class="label">Exchanges</div>
+        <div class="value" id="kpiEx">—</div>
+        <div class="sub">Plataformas</div>
+      </div>
+    </div>
+
+    <div class="grid row2">
+      <div class="card">
+        <div class="section-title">
+          <h3>Objetivo de inversión</h3>
+          <div class="actions">
+            <span class="badge">Meta de ganancia: <strong id="goalTarget">—</strong></span>
+          </div>
+        </div>
+        <div class="pad">
+          <div class="goal-grid">
+            <div class="canvas-wrap sm"><canvas id="goalGauge"></canvas></div>
+            <div class="goal-metrics">
+              <div class="mini">
+                <div class="t">Inversión base</div>
+                <div class="v" id="goalBase">—</div>
+              </div>
+              <div class="mini">
+                <div class="t">Ganancia actual</div>
+                <div class="v" id="goalPnl">—</div>
+              </div>
+              <div class="mini">
+                <div class="t">Falta (para 5,000)</div>
+                <div class="v bad" id="goalLeft">—</div>
+              </div>
+              <div class="mini">
+                <div class="t">Progreso</div>
+                <div class="v good" id="goalPct">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="smallnote">El gauge mide progreso de <strong>P&amp;L</strong> hacia la meta de <strong>5,000 USDT</strong>. La inversión base sirve como referencia del capital invertido.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <h3>Concentración &amp; pérdidas</h3>
+          <div class="actions">
+            <span class="badge">HHI: <strong id="hhiVal">—</strong></span>
+          </div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap sm"><canvas id="riskChart"></canvas></div>
+          <div class="smallnote">Indicador de concentración (HHI) + exposición en pérdida (peso total de activos con P&amp;L negativo).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid row2">
+      <div class="card">
+        <div class="section-title">
+          <h3>Curva del portafolio</h3>
+          <div class="actions">
+            <div class="time-tabs" aria-label="Temporalidad (solo curva)">
+              <button data-range="4h">4 Hrs</button>
+              <button data-range="1d" class="active">1D</button>
+              <button data-range="7d">7D</button>
+              <button data-range="30d">30D</button>
+              <button data-range="all">Todo</button>
+            </div>
+          </div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap"><canvas id="curveChart"></canvas></div>
+          <div class="smallnote" id="curveNote">Temporalidad aplicada solo a esta curva.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <h3>Watchlist</h3>
+          <div class="actions"><span class="badge">Ordenado por % de cartera</span></div>
+        </div>
+        <div class="pad" id="watchlist"></div>
+      </div>
+    </div>
+
+    <div class="grid row3">
+      <div class="card">
+        <div class="section-title">
+          <h3>Composición del portafolio</h3>
+          <div class="actions"><span class="badge">Donut</span></div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap sm"><canvas id="donutChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <h3>Mapa de cartera</h3>
+          <div class="actions"><span class="badge">Bubble</span></div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap sm"><canvas id="bubbleChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid row4">
+      <div class="card">
+        <div class="section-title">
+          <h3>Ganancia / pérdida por activo</h3>
+          <div class="actions"><span class="badge">Barras</span></div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap sm"><canvas id="pnlChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <h3>Retornos diarios (histórico)</h3>
+          <div class="actions"><span class="badge">Indicador</span></div>
+        </div>
+        <div class="pad">
+          <div class="canvas-wrap sm"><canvas id="retChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">
+        <h3>Tabla profesional</h3>
+        <div class="actions"><span class="badge">Filtra por activo y fecha · Ordena por columnas</span></div>
+      </div>
+      <div class="filters">
+        <select id="filterAsset">
+          <option value="all">Todos los activos</option>
+        </select>
+        <input id="fromDate" type="date"/>
+        <input id="toDate" type="date"/>
+        <button class="pill primary" id="clearFilters">🧼 Limpiar</button>
+      </div>
+      <div class="pad" style="padding-top:0">
+        <div class="table-wrap">
+          <table id="txTable">
+            <thead>
+              <tr>
+                <th data-key="t">Fecha</th>
+                <th data-key="asset">Activo</th>
+                <th data-key="side">Tipo</th>
+                <th data-key="usdt">USDT</th>
+                <th data-key="qty">Cantidad</th>
+                <th data-key="price">Precio</th>
+                <th data-key="valueNow">Valor actual</th>
+                <th data-key="pnl">P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="smallnote" id="tableNote"></div>
+      </div>
+    </div>
+
+    <div class="footer">© <strong>Illimani Tokens Academy</strong> · Dashboard Premium · Gestión 2026</div>
+  </div>
+</div>
+
+<script>
+const DEMO_DATA = {"meta": {"source": "Portafolio sheet", "generatedAt": "2026-01-14T20:20:36.639377Z", "currency": "USDT", "year": "Gestión 2026"}, "assets": [{"asset": "BTC", "label": "BTC", "invested": 1634.456973, "value": 1677.036973, "pnl": 42.58, "weight": 0.4070589646, "roi": 0.02605146585}, {"asset": "ETH", "label": "ETH", "invested": 770.227606, "value": 926.987606, "pnl": 156.76, "weight": 0.2250031581, "roi": 0.2035242554}, {"asset": "AVAX", "label": "AVAX", "invested": 409.5018, "value": 346.2718, "pnl": -63.23, "weight": 0.08404885682, "roi": -0.1544071357}, {"asset": "LINK", "label": "LINK", "invested": 799.2756, "value": 715.3656, "pnl": -83.91, "weight": 0.1736371858, "roi": -0.1049825617}, {"asset": "SOL", "label": "SOL", "invested": 492.61511, "value": 454.22511, "pnl": -38.39, "weight": 0.1102518346, "roi": -0.07793102408}], "totals": {"invested": 4106.077089, "value": 4119.887089, "pnl": 13.81, "roi": 0.0033633075319010404}, "goal": {"targetPnl": 5000.0}, "timeseries": {"portfolioCurve": [{"t": "2024-10-23T19:07:57", "invested": 49.21778196431805, "value": 72.32513763702191}, {"t": "2024-11-30T03:28:52", "invested": 181.431453837038, "value": 207.3320612261295}, {"t": "2024-12-02T18:01:15", "invested": 201.15495023472417, "value": 213.51922428816573}, {"t": "2024-12-02T18:03:55", "invested": 222.56998636217443, "value": 227.13788276426476}, {"t": "2025-02-13T20:14:53", "invested": 321.97876220632475, "value": 394.52794514825246}, {"t": "2025-03-02T22:07:32", "invested": 371.45005444262506, "value": 460.81440985231154}, {"t": "2025-03-02T22:14:49", "invested": 377.07286432039757, "value": 466.6004208632733}, {"t": "2025-03-02T22:14:49", "invested": 398.62696885185886, "value": 488.78012973862667}, {"t": "2025-03-02T22:14:49", "invested": 404.2497787296314, "value": 494.56614074958844}, {"t": "2025-03-02T22:14:49", "invested": 409.8725886074039, "value": 500.35215176055016}, {"t": "2025-03-02T22:14:49", "invested": 416.4325334648051, "value": 507.10249794000555}, {"t": "2025-03-02T22:14:49", "invested": 422.0553433425776, "value": 512.8885089509673}, {"t": "2025-03-02T22:14:49", "invested": 470.78636228327275, "value": 563.0339377126359}, {"t": "2025-03-02T22:19:52", "invested": 525.917833150273, "value": 636.6855651615905}, {"t": "2025-03-02T22:25:36", "invested": 531.3730090152518, "value": 641.2283101078725}, {"t": "2025-03-02T22:25:36", "invested": 536.8281848802305, "value": 645.7710550541547}, {"t": "2025-03-02T22:25:36", "invested": 542.2833607452093, "value": 650.3138000004368}, {"t": "2025-03-02T22:25:36", "invested": 547.738536610188, "value": 654.8565449467188}, {"t": "2025-03-02T22:25:36", "invested": 564.6319844501223, "value": 668.9244002642378}, {"t": "2025-03-02T22:25:36", "invested": 570.0871603151011, "value": 673.4671452105199}, {"t": "2025-03-02T22:25:36", "invested": 575.5423361800798, "value": 678.009890156802}, {"t": "2025-03-02T22:27:00", "invested": 781.0226670286327, "value": 889.199292056906}, {"t": "2025-03-04T16:35:53", "invested": 880.431442872783, "value": 1056.5893544408939}, {"t": "2025-03-08T07:12:47", "invested": 1029.1917054847618, "value": 1223.4193385902909}, {"t": "2025-03-09T13:51:34", "invested": 1128.5607178185746, "value": 1338.1752236410323}, {"t": "2025-03-11T20:18:15", "invested": 1228.4065940501116, "value": 1453.7954095318908}, {"t": "2025-04-07T06:44:53", "invested": 1327.5668479546516, "value": 1582.051986941543}, {"t": "2025-05-18T03:07:36", "invested": 1349.7449458454814, "value": 1596.7833275654386}, {"t": "2025-05-18T03:07:54", "invested": 1365.0340155703118, "value": 1610.9694301447084}, {"t": "2025-06-14T03:00:33", "invested": 1383.8849017336381, "value": 1628.3274631775937}, {"t": "2025-06-14T03:07:12", "invested": 1388.8603109646378, "value": 1632.1576117398065}, {"t": "2025-06-14T03:08:38", "invested": 1395.7125777653303, "value": 1639.0449992390083}, {"t": "2025-06-14T03:10:07", "invested": 1409.4246246819935, "value": 1657.123125976479}, {"t": "2025-06-14T03:10:41", "invested": 1414.4411891461925, "value": 1662.5138449566016}, {"t": "2025-06-21T01:27:52", "invested": 1433.95974997849, "value": 1680.8362131579804}, {"t": "2025-06-21T01:28:15", "invested": 1434.9214622868146, "value": 1682.1753336570523}, {"t": "2025-06-21T01:28:15", "invested": 1440.2108799825996, "value": 1689.5404964019476}, {"t": "2025-06-21T01:28:15", "invested": 1445.5002976783849, "value": 1696.9056591468432}, {"t": "2025-06-21T01:28:15", "invested": 1450.78971537417, "value": 1704.2708218917385}, {"t": "2025-06-21T01:28:15", "invested": 1453.6748522991438, "value": 1708.2881833889542}, {"t": "2025-06-21T01:29:16", "invested": 1458.5347485326126, "value": 1712.412958763645}, {"t": "2025-06-21T01:29:49", "invested": 1463.4352035466259, "value": 1717.9455387695602}, {"t": "2025-06-21T01:31:41", "invested": 1473.3439621555656, "value": 1728.349890098142}, {"t": "2025-06-23T14:17:48", "invested": 1666.1719362817043, "value": 1911.5735721119308}, {"t": "2025-07-02T03:38:59", "invested": 1686.2264025677368, "value": 1929.8959403133097}, {"t": "2025-07-02T03:39:34", "invested": 1696.124792841356, "value": 1943.6219254287967}, {"t": "2025-07-02T03:40:05", "invested": 1701.9753969348876, "value": 1948.6305812409212}, {"t": "2025-07-02T03:40:40", "invested": 1706.859747727214, "value": 1954.0213002210437}, {"t": "2025-07-02T03:40:49", "invested": 1713.6741397843098, "value": 1960.7621475606882}, {"t": "2025-07-17T19:41:19", "invested": 1719.116173809122, "value": 1964.297669310423}, {"t": "2025-07-17T19:41:19", "invested": 1724.5582078339341, "value": 1967.833191060158}, {"t": "2025-07-17T19:41:19", "invested": 1730.0002418587464, "value": 1971.368712809893}, {"t": "2025-07-17T19:41:19", "invested": 1735.4422758835588, "value": 1974.9042345596279}, {"t": "2025-07-17T19:41:19", "invested": 1740.4308070729699, "value": 1978.145129496885}, {"t": "2025-07-17T19:41:19", "invested": 1748.3671066924876, "value": 1983.3010987152484}, {"t": "2025-07-17T19:42:03", "invested": 1768.1673466651253, "value": 1999.6151166814086}, {"t": "2025-07-17T19:49:29", "invested": 1857.610313203879, "value": 2075.2298390130727}, {"t": "2025-07-24T13:48:25", "invested": 1864.7080997991513, "value": 2079.6492412002412}, {"t": "2025-07-24T13:49:12", "invested": 1869.5635226377071, "value": 2083.479488896644}, {"t": "2025-07-24T13:53:32", "invested": 1874.371706425982, "value": 2087.289533045139}, {"t": "2025-07-25T04:20:08", "invested": 1880.1036621691926, "value": 2092.1112088876066}, {"t": "2025-08-05T02:43:45", "invested": 1900.6152389345102, "value": 2109.4692419204916}, {"t": "2025-08-05T02:44:24", "invested": 1911.504078605375, "value": 2116.5402854199615}, {"t": "2025-08-05T02:44:58", "invested": 1918.4084157228547, "value": 2122.356587477462}, {"t": "2025-08-05T02:46:55", "invested": 1984.958724149133, "value": 2180.5330308217854}, {"t": "2025-08-19T23:16:40", "invested": 2016.410951047563, "value": 2207.5344155396065}, {"t": "2025-08-19T23:36:00", "invested": 2021.7814107537672, "value": 2211.069937289342}, {"t": "2025-08-19T23:36:00", "invested": 2026.7043321511212, "value": 2214.310832226599}, {"t": "2025-08-19T23:36:00", "invested": 2032.0747918573254, "value": 2217.8463539763343}, {"t": "2025-08-20T00:01:34", "invested": 2037.0119287096254, "value": 2220.8254355179806}, {"t": "2025-08-20T00:05:03", "invested": 2058.85728554595, "value": 2238.996415303109}, {"t": "2025-10-10T18:38:09", "invested": 2266.333863506349, "value": 2417.3984214744296}, {"t": "2025-10-10T18:39:00", "invested": 2451.2077776410783, "value": 2578.762441612594}, {"t": "2025-10-10T18:39:05", "invested": 2550.5098481052373, "value": 2655.842565539833}, {"t": "2025-10-10T18:40:25", "invested": 2649.755692965779, "value": 2726.9949407532495}, {"t": "2025-10-10T18:42:18", "invested": 3246.102080049304, "value": 3256.5621500373913}, {"t": "2025-10-10T18:42:18", "invested": 3306.6783087415743, "value": 3304.0855936779453}, {"t": "2025-10-15T22:04:46", "invested": 3326.576504332571, "value": 3321.4436267108304}, {"t": "2025-10-15T22:06:36", "invested": 3336.4662559835697, "value": 3328.9171748482627}, {"t": "2025-10-15T22:07:32", "invested": 3346.3390385565312, "value": 3335.5462781290157}, {"t": "2025-10-17T06:45:50", "invested": 3409.6528056021184, "value": 3394.3707234071267}, {"t": "2025-10-17T12:56:21", "invested": 3544.795139538228, "value": 3514.8915683235978}, {"t": "2025-10-30T05:12:55", "invested": 3612.3931071122497, "value": 3580.466359781164}, {"t": "2025-10-30T05:13:33", "invested": 3711.7024741805562, "value": 3687.5075634839563}, {"t": "2025-10-30T05:15:17", "invested": 3761.1086357750987, "value": 3735.046341201009}, {"t": "2025-10-30T05:15:34", "invested": 3810.6142061454857, "value": 3790.619841912493}, {"t": "2025-11-23T03:11:45", "invested": 3860.239067046886, "value": 3847.1881899082528}, {"t": "2025-11-23T03:13:16", "invested": 3909.8639279482854, "value": 3906.202376638015}, {"t": "2025-11-26T20:59:48", "invested": 3958.852572684283, "value": 3960.205146073658}, {"t": "2025-11-26T21:06:44", "invested": 4031.669500990123, "value": 4033.861849193137}, {"t": "2025-12-01T14:51:51", "invested": 4056.487717031577, "value": 4062.87680078552}, {"t": "2025-12-01T14:52:55", "invested": 4106.077089, "value": 4119.887088999997}], "dailyReturns": [{"t": "2024-10-23", "ret": 0.0, "value": 72.32513763702191}, {"t": "2024-11-30", "ret": 1.8666666666666671, "value": 207.3320612261295}, {"t": "2024-12-02", "ret": 0.09552705655365945, "value": 227.13788276426476}, {"t": "2025-02-13", "ret": 0.7369535206846742, "value": 394.52794514825246}, {"t": "2025-03-02", "ret": 1.253830946557588, "value": 889.199292056906}, {"t": "2025-03-04", "ret": 0.18824808328038523, "value": 1056.5893544408939}, {"t": "2025-03-08", "ret": 0.15789481831158225, "value": 1223.4193385902909}, {"t": "2025-03-09", "ret": 0.09379930611769738, "value": 1338.1752236410323}, {"t": "2025-03-11", "ret": 0.08640137991515662, "value": 1453.7954095318908}, {"t": "2025-04-07", "ret": 0.08822188911089612, "value": 1582.051986941543}, {"t": "2025-05-18", "ret": 0.018278440558119335, "value": 1610.9694301447084}, {"t": "2025-06-14", "ret": 0.031995898772122056, "value": 1662.5138449566016}, {"t": "2025-06-21", "ret": 0.039600298873456286, "value": 1728.349890098142}, {"t": "2025-06-23", "ret": 0.1060107580435492, "value": 1911.5735721119308}, {"t": "2025-07-02", "ret": 0.02573198131966903, "value": 1960.7621475606882}, {"t": "2025-07-17", "ret": 0.05837918260243313, "value": 2075.2298390130727}, {"t": "2025-07-24", "ret": 0.005811257049870289, "value": 2087.289533045139}, {"t": "2025-07-25", "ret": 0.0023100177364629992, "value": 2092.1112088876066}, {"t": "2025-08-05", "ret": 0.042264398545617254, "value": 2180.5330308217854}, {"t": "2025-08-19", "ret": 0.0171120192297598, "value": 2217.8463539763343}, {"t": "2025-08-20", "ret": 0.009536305925275324, "value": 2238.996415303109}, {"t": "2025-10-10", "ret": 0.4756993674019112, "value": 3304.0855936779453}, {"t": "2025-10-15", "ret": 0.009521752254622928, "value": 3335.5462781290157}, {"t": "2025-10-17", "ret": 0.053767891445709814, "value": 3514.8915683235978}, {"t": "2025-10-30", "ret": 0.07844574099348445, "value": 3790.619841912493}, {"t": "2025-11-23", "ret": 0.030491724189151803, "value": 3906.202376638015}, {"t": "2025-11-26", "ret": 0.032681223409882776, "value": 4033.861849193137}, {"t": "2025-12-01", "ret": 0.02132577738726149, "value": 4119.887088999997}]}, "risk": {"hhi": 0.265692971474156, "lossAssets": 3, "lossWeight": 0.36793787722}, "transactions": [{"t": "2024-10-23T19:07:57", "asset": "BTC", "side": "buy", "usdt": 49.5105, "qty": 0.00075, "price": 66014.0, "valueNow": 72.956805, "pnl": 23.45}, {"t": "2024-10-23T19:07:57", "asset": "BTC", "side": "sell", "usdt": 31.45, "qty": 0.00037, "price": 85000.0, "valueNow": 35.9920238, "pnl": 4.540000000000003}, {"t": "2024-11-30T03:28:52", "asset": "BTC", "side": "buy", "usdt": 133.0, "qty": 0.0014, "price": 95000.0, "valueNow": 136.186036, "pnl": 3.1899999999999977}, {"t": "2024-12-02T18:01:15", "asset": "AVAX", "side": "buy", "usdt": 19.8408, "qty": 0.42, "price": 47.24, "valueNow": 6.241199999999999, "pnl": -13.6}, {"t": "2024-12-02T18:03:55", "asset": "LINK", "side": "buy", "usdt": 21.5424, "qty": 0.96, "price": 22.44, "valueNow": 13.7376, "pnl": -7.799999999999999}, {"t": "2025-02-13T20:14:53", "asset": "ETH", "side": "buy", "usdt": 100.0, "qty": 0.05, "price": 2000.0, "valueNow": 168.852, "pnl": 68.85}, {"t": "2025-03-02T22:07:32", "asset": "ETH", "side": "buy", "usdt": 49.765518, "qty": 0.0198, "price": 2513.41, "valueNow": 66.865392, "pnl": 17.1}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 5.656251, "qty": 6e-05, "price": 94270.85, "valueNow": 5.8365444, "pnl": 0.17999999999999972}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 6.598959499999999, "qty": 7e-05, "price": 94270.85, "valueNow": 6.8093018, "pnl": 0.20999999999999996}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 49.020842, "qty": 0.00052, "price": 94270.85, "valueNow": 50.5833848, "pnl": 1.5599999999999952}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 5.656251, "qty": 6e-05, "price": 94270.85, "valueNow": 5.8365444, "pnl": 0.17999999999999972}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 5.656251, "qty": 6e-05, "price": 94270.85, "valueNow": 5.8365444, "pnl": 0.17999999999999972}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 21.682295500000002, "qty": 0.00023, "price": 94270.85, "valueNow": 22.3734202, "pnl": 0.6900000000000013}, {"t": "2025-03-02T22:14:49", "asset": "BTC", "side": "buy", "usdt": 5.656251, "qty": 6e-05, "price": 94270.85, "valueNow": 5.8365444, "pnl": 0.17999999999999972}, {"t": "2025-03-02T22:19:52", "asset": "ETH", "side": "buy", "usdt": 55.45936, "qty": 0.022, "price": 2520.88, "valueNow": 74.29487999999999, "pnl": 18.830000000000005}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 16.993920000000003, "qty": 0.096, "price": 177.02, "valueNow": 14.190719999999999, "pnl": -2.799999999999999}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:25:36", "asset": "SOL", "side": "buy", "usdt": 5.487620000000001, "qty": 0.031, "price": 177.02, "valueNow": 4.58242, "pnl": -0.9100000000000001}, {"t": "2025-03-02T22:27:00", "asset": "BTC", "side": "buy", "usdt": 206.7024054, "qty": 0.00219, "price": 94384.66, "valueNow": 213.03387060000003, "pnl": 6.3300000000000125}, {"t": "2025-03-04T16:35:53", "asset": "ETH", "side": "buy", "usdt": 100.0, "qty": 0.05, "price": 2000.0, "valueNow": 168.852, "pnl": 68.85}, {"t": "2025-03-08T07:12:47", "asset": "BTC", "side": "buy", "usdt": 149.645, "qty": 0.00173, "price": 86500.0, "valueNow": 168.2870302, "pnl": 18.639999999999986}, {"t": "2025-03-09T13:51:34", "asset": "BTC", "side": "buy", "usdt": 99.96000000000001, "qty": 0.00119, "price": 84000.0, "valueNow": 115.75813060000002, "pnl": 15.800000000000011}, {"t": "2025-03-11T20:18:15", "asset": "SOL", "side": "buy", "usdt": 100.4397, "qty": 0.789, "price": 127.3, "valueNow": 116.62998, "pnl": 16.189999999999998}, {"t": "2025-04-07T06:44:53", "asset": "BTC", "side": "buy", "usdt": 99.75, "qty": 0.00133, "price": 75000.0, "valueNow": 129.37673420000002, "pnl": 29.629999999999995}, {"t": "2025-05-18T03:07:36", "asset": "AVAX", "side": "buy", "usdt": 22.31, "qty": 1.0, "price": 22.31, "valueNow": 14.86, "pnl": -7.449999999999999}, {"t": "2025-05-18T03:07:54", "asset": "LINK", "side": "buy", "usdt": 15.38, "qty": 1.0, "price": 15.38, "valueNow": 14.31, "pnl": -1.0700000000000003}, {"t": "2025-06-14T03:00:33", "asset": "BTC", "side": "buy", "usdt": 18.963, "qty": 0.00018, "price": 105350.0, "valueNow": 17.509633200000003, "pnl": -1.4499999999999993}, {"t": "2025-06-14T03:07:12", "asset": "AVAX", "side": "buy", "usdt": 5.005, "qty": 0.26, "price": 19.25, "valueNow": 3.8636, "pnl": -1.15}, {"t": "2025-06-14T03:08:38", "asset": "SOL", "side": "buy", "usdt": 6.89302, "qty": 0.047, "price": 146.66, "valueNow": 6.94754, "pnl": 0.0600000000000005}, {"t": "2025-06-14T03:10:07", "asset": "ETH", "side": "buy", "usdt": 13.793598, "qty": 0.0054, "price": 2554.37, "valueNow": 18.236016, "pnl": 4.449999999999999}, {"t": "2025-06-14T03:10:41", "asset": "LINK", "side": "buy", "usdt": 5.0464, "qty": 0.38, "price": 13.28, "valueNow": 5.4378, "pnl": 0.39000000000000057}, {"t": "2025-06-21T01:27:52", "asset": "BTC", "side": "buy", "usdt": 19.634645600000002, "qty": 0.00019, "price": 103340.24, "valueNow": 18.482390600000002, "pnl": -1.1499999999999986}, {"t": "2025-06-21T01:28:15", "asset": "ETH", "side": "buy", "usdt": 0.9674320000000001, "qty": 0.0004, "price": 2418.58, "valueNow": 1.350816, "pnl": 0.3800000000000001}, {"t": "2025-06-21T01:28:15", "asset": "ETH", "side": "buy", "usdt": 5.320876, "qty": 0.0022, "price": 2418.58, "valueNow": 7.429488, "pnl": 2.1099999999999994}, {"t": "2025-06-21T01:28:15", "asset": "ETH", "side": "buy", "usdt": 5.320876, "qty": 0.0022, "price": 2418.58, "valueNow": 7.429488, "pnl": 2.1099999999999994}, {"t": "2025-06-21T01:28:15", "asset": "ETH", "side": "buy", "usdt": 5.320876, "qty": 0.0022, "price": 2418.58, "valueNow": 7.429488, "pnl": 2.1099999999999994}, {"t": "2025-06-21T01:28:15", "asset": "ETH", "side": "buy", "usdt": 2.9022959999999998, "qty": 0.0012, "price": 2418.58, "valueNow": 4.052447999999999, "pnl": 1.15}, {"t": "2025-06-21T01:29:16", "asset": "AVAX", "side": "buy", "usdt": 4.888800000000001, "qty": 0.28, "price": 17.46, "valueNow": 4.1608, "pnl": -0.7299999999999995}, {"t": "2025-06-21T01:29:49", "asset": "LINK", "side": "buy", "usdt": 4.929600000000001, "qty": 0.39, "price": 12.64, "valueNow": 5.580900000000001, "pnl": 0.6500000000000004}, {"t": "2025-06-21T01:31:41", "asset": "SOL", "side": "buy", "usdt": 9.967689999999997, "qty": 0.071, "price": 140.39, "valueNow": 10.495219999999998, "pnl": 0.5299999999999994}, {"t": "2025-06-23T14:17:48", "asset": "BTC", "side": "buy", "usdt": 193.9748, "qty": 0.0019, "price": 102092.0, "valueNow": 184.82390600000002, "pnl": -9.150000000000006}, {"t": "2025-07-02T03:38:59", "asset": "BTC", "side": "buy", "usdt": 20.173738300000004, "qty": 0.00019, "price": 106177.57, "valueNow": 18.482390600000002, "pnl": -1.6900000000000013}, {"t": "2025-07-02T03:39:34", "asset": "ETH", "side": "buy", "usdt": 9.95726, "qty": 0.0041, "price": 2428.6, "valueNow": 13.845864, "pnl": 3.889999999999999}, {"t": "2025-07-02T03:40:05", "asset": "AVAX", "side": "buy", "usdt": 5.8854, "qty": 0.34, "price": 17.31, "valueNow": 5.0524000000000004, "pnl": -0.8399999999999999}, {"t": "2025-07-02T03:40:40", "asset": "LINK", "side": "buy", "usdt": 4.9134, "qty": 0.38, "price": 12.93, "valueNow": 5.4378, "pnl": 0.5300000000000002}, {"t": "2025-07-02T03:40:49", "asset": "SOL", "side": "buy", "usdt": 6.854920000000001, "qty": 0.046, "price": 149.02, "valueNow": 6.79972, "pnl": -0.04999999999999982}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 5.474399999999999, "qty": 0.24, "price": 22.81, "valueNow": 3.5664, "pnl": -1.9}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 5.474399999999999, "qty": 0.24, "price": 22.81, "valueNow": 3.5664, "pnl": -1.9}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 5.474399999999999, "qty": 0.24, "price": 22.81, "valueNow": 3.5664, "pnl": -1.9}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 5.474399999999999, "qty": 0.24, "price": 22.81, "valueNow": 3.5664, "pnl": -1.9}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 5.018199999999999, "qty": 0.22, "price": 22.81, "valueNow": 3.2692, "pnl": -1.7499999999999996}, {"t": "2025-07-17T19:41:19", "asset": "AVAX", "side": "buy", "usdt": 7.983499999999999, "qty": 0.35, "price": 22.81, "valueNow": 5.201, "pnl": -2.7800000000000002}, {"t": "2025-07-17T19:42:03", "asset": "LINK", "side": "buy", "usdt": 19.918, "qty": 1.15, "price": 17.32, "valueNow": 16.4565, "pnl": -3.460000000000001}, {"t": "2025-07-17T19:49:29", "asset": "SOL", "side": "buy", "usdt": 89.97492000000001, "qty": 0.516, "price": 174.37, "valueNow": 76.27512, "pnl": -13.689999999999998}, {"t": "2025-07-24T13:48:25", "asset": "AVAX", "side": "buy", "usdt": 7.14, "qty": 0.3, "price": 23.8, "valueNow": 4.457999999999999, "pnl": -2.6799999999999997}, {"t": "2025-07-24T13:49:12", "asset": "LINK", "side": "buy", "usdt": 4.8843000000000005, "qty": 0.27, "price": 18.09, "valueNow": 3.8637000000000006, "pnl": -1.02}, {"t": "2025-07-24T13:53:32", "asset": "SOL", "side": "buy", "usdt": 4.83678, "qty": 0.026, "price": 186.03, "valueNow": 3.84332, "pnl": -1.0}, {"t": "2025-07-25T04:20:08", "asset": "BTC", "side": "buy", "usdt": 5.766046, "qty": 5e-05, "price": 115320.92, "valueNow": 4.863787, "pnl": -0.9099999999999993}, {"t": "2025-08-05T02:43:45", "asset": "BTC", "side": "buy", "usdt": 20.6335674, "qty": 0.00018, "price": 114630.93, "valueNow": 17.509633200000003, "pnl": -3.1199999999999974}, {"t": "2025-08-05T02:44:24", "asset": "AVAX", "side": "buy", "usdt": 10.9536, "qty": 0.48, "price": 22.82, "valueNow": 7.1328, "pnl": -3.8199999999999994}, {"t": "2025-08-05T02:44:58", "asset": "LINK", "side": "buy", "usdt": 6.9454, "qty": 0.41, "price": 16.94, "valueNow": 5.8671, "pnl": -1.08}, {"t": "2025-08-05T02:46:55", "asset": "SOL", "side": "buy", "usdt": 66.94611, "qty": 0.397, "price": 168.63, "valueNow": 58.68454, "pnl": -8.270000000000003}, {"t": "2025-08-19T23:16:40", "asset": "BTC", "side": "buy", "usdt": 31.639285999999995, "qty": 0.00028, "price": 112997.45, "valueNow": 27.2372072, "pnl": -4.400000000000002}, {"t": "2025-08-19T23:36:00", "asset": "AVAX", "side": "buy", "usdt": 5.4024, "qty": 0.24, "price": 22.51, "valueNow": 3.5664, "pnl": -1.8300000000000005}, {"t": "2025-08-19T23:36:00", "asset": "AVAX", "side": "buy", "usdt": 5.4024, "qty": 0.24, "price": 22.51, "valueNow": 3.5664, "pnl": -1.8300000000000005}, {"t": "2025-08-19T23:36:00", "asset": "AVAX", "side": "buy", "usdt": 4.9522, "qty": 0.22, "price": 22.51, "valueNow": 3.2692, "pnl": -1.6800000000000002}, {"t": "2025-08-20T00:01:34", "asset": "LINK", "side": "buy", "usdt": 4.9665, "qty": 0.21, "price": 23.65, "valueNow": 3.0051, "pnl": -1.96}, {"t": "2025-08-20T00:05:03", "asset": "SOL", "side": "buy", "usdt": 21.975279999999998, "qty": 0.124, "price": 177.22, "valueNow": 18.32968, "pnl": -3.650000000000002}, {"t": "2025-10-10T18:38:09", "asset": "BTC", "side": "buy", "usdt": 208.71052500000002, "qty": 0.00185, "price": 112816.5, "valueNow": 179.96011900000002, "pnl": -28.75}, {"t": "2025-10-10T18:39:00", "asset": "ETH", "side": "buy", "usdt": 185.973434, "qty": 0.0482, "price": 3858.37, "valueNow": 162.773328, "pnl": -23.19999999999999}, {"t": "2025-10-10T18:39:05", "asset": "SOL", "side": "buy", "usdt": 99.89266, "qty": 0.526, "price": 189.91, "valueNow": 77.75332, "pnl": -22.14}, {"t": "2025-10-10T18:40:25", "asset": "AVAX", "side": "buy", "usdt": 99.83610000000002, "qty": 4.83, "price": 20.67, "valueNow": 71.7738, "pnl": -28.070000000000007}, {"t": "2025-10-10T18:42:18", "asset": "LINK", "side": "buy", "usdt": 599.8931, "qty": 37.33, "price": 16.07, "valueNow": 534.1923, "pnl": -65.69999999999993}, {"t": "2025-10-10T18:42:18", "asset": "LINK", "side": "buy", "usdt": 60.93650000000001, "qty": 3.35, "price": 18.19, "valueNow": 47.938500000000005, "pnl": -13.0}, {"t": "2025-10-15T22:04:46", "asset": "BTC", "side": "buy", "usdt": 20.016538200000003, "qty": 0.00018, "price": 111202.99, "valueNow": 17.509633200000003, "pnl": -2.509999999999998}, {"t": "2025-10-15T22:06:36", "asset": "SOL", "side": "buy", "usdt": 9.948569999999998, "qty": 0.051, "price": 195.07, "valueNow": 7.538819999999999, "pnl": -2.4099999999999993}, {"t": "2025-10-15T22:07:32", "asset": "AVAX", "side": "buy", "usdt": 9.9315, "qty": 0.45, "price": 22.07, "valueNow": 6.687, "pnl": -3.2399999999999993}, {"t": "2025-10-17T06:45:50", "asset": "BTC", "side": "buy", "usdt": 63.690319599999995, "qty": 0.00061, "price": 104410.36, "valueNow": 59.3382014, "pnl": -4.349999999999994}, {"t": "2025-10-17T12:56:21", "asset": "ETH", "side": "buy", "usdt": 135.94608, "qty": 0.036, "price": 3776.28, "valueNow": 121.57343999999999, "pnl": -14.379999999999995}, {"t": "2025-10-30T05:12:55", "asset": "BTC", "side": "buy", "usdt": 68.0, "qty": 0.00068, "price": 100000.0, "valueNow": 66.1475032, "pnl": -1.8499999999999943}, {"t": "2025-10-30T05:13:33", "asset": "BTC", "side": "buy", "usdt": 99.9, "qty": 0.00111, "price": 90000.0, "valueNow": 107.97607140000001, "pnl": 8.079999999999998}, {"t": "2025-10-30T05:15:17", "asset": "ETH", "side": "buy", "usdt": 49.7, "qty": 0.0142, "price": 3500.0, "valueNow": 47.953968, "pnl": -1.75}, {"t": "2025-10-30T05:15:34", "asset": "ETH", "side": "buy", "usdt": 49.8, "qty": 0.0166, "price": 3000.0, "valueNow": 56.058864, "pnl": 6.260000000000005}, {"t": "2025-11-23T03:11:45", "asset": "AVAX", "side": "buy", "usdt": 49.92, "qty": 3.84, "price": 13.0, "valueNow": 57.0624, "pnl": 7.140000000000001}, {"t": "2025-11-23T03:13:16", "asset": "LINK", "side": "buy", "usdt": 49.92, "qty": 4.16, "price": 12.0, "valueNow": 59.5296, "pnl": 9.61}, {"t": "2025-11-26T20:59:48", "asset": "BTC", "side": "buy", "usdt": 49.279999999999994, "qty": 0.00056, "price": 88000.0, "valueNow": 54.4744144, "pnl": 5.189999999999998}, {"t": "2025-11-26T21:06:44", "asset": "AVAX", "side": "buy", "usdt": 73.25, "qty": 5.0, "price": 14.65, "valueNow": 74.3, "pnl": 1.0499999999999972}, {"t": "2025-12-01T14:51:51", "asset": "SOL", "side": "buy", "usdt": 24.96582, "qty": 0.198, "price": 126.09, "valueNow": 29.26836, "pnl": 4.300000000000001}, {"t": "2025-12-01T14:52:55", "asset": "AVAX", "side": "buy", "usdt": 49.8843, "qty": 3.87, "price": 12.89, "valueNow": 57.5082, "pnl": 7.6299999999999955}]};
+
+const ASSET_COLORS = {
+  BTC: "#F6A21A",
+  ETH: "#7C8CFF",
+  SOL: "#19F6B7",
+  AVAX: "#FF4D5D",
+  LINK: "#2A5BFF"
+};
+
+const fmtMoney = (n) => {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return new Intl.NumberFormat('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}).format(n);
+};
+const fmtPct = (n) => {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return (n*100).toFixed(2) + "%";
+};
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+
+let state = {
+  data: null,
+  theme: (localStorage.getItem("heidyTheme") || "dark"),
+  range: "1d",
+  sort: {key:"t", dir:"desc"}
+};
+
+function setTheme(theme){
+  state.theme = theme;
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("heidyTheme", theme);
+  if(state.data) renderAll();
+}
+
+function nowLabel(){
+  const d = new Date();
+  return d.toLocaleString();
+}
+
+function setStatus(msg){
+  document.getElementById("statusText").textContent = msg;
+}
+
+function normalizeData(d){
+  const assets = (d.assets || []).filter(a => a && a.asset && a.asset !== "DOGE");
+  const tx = (d.transactions || []).filter(x => x && x.asset && x.asset !== "DOGE");
+  const totals = d.totals || {};
+  const curve = (((d.timeseries||{}).portfolioCurve)||[]).filter(p=>p && p.t);
+  const returns = (((d.timeseries||{}).dailyReturns)||[]).filter(p=>p && p.t);
+  const goal = d.goal || {targetPnl:5000};
+  return {
+    meta: d.meta || {},
+    assets,
+    transactions: tx,
+    totals: {
+      invested: +totals.invested || 0,
+      value: +totals.value || 0,
+      pnl: +totals.pnl || 0,
+      roi: (totals.roi !== undefined) ? +totals.roi : ((+totals.invested||1) ? (+totals.pnl/(+totals.invested)) : 0)
+    },
+    timeseries: { portfolioCurve: curve, dailyReturns: returns },
+    goal: { targetPnl: +goal.targetPnl || 5000 }
+  };
+}
+
+function applyNegStyle(el, n){
+  el.classList.remove("good","bad");
+  if(n < 0) el.classList.add("bad");
+  else el.classList.add("good");
+}
+
+function loadData(raw){
+  state.data = normalizeData(raw);
+  document.getElementById("lastLoad").textContent = nowLabel();
+  setStatus("Datos cargados");
+  populateAssetFilter();
+  renderAll();
+}
+
+document.getElementById("demoBtn").addEventListener("click", ()=> loadData(DEMO_DATA));
+
+document.getElementById("fileInput").addEventListener("change", async (e)=>{
+  const file = e.target.files?.[0];
+  if(!file) return;
+  try {
+    const txt = await file.text();
+    const json = JSON.parse(txt);
+    loadData(json);
+  } catch(err) {
+    console.error(err);
+    setStatus("Error al cargar JSON");
+    alert("No se pudo leer el JSON. Verifica el formato.");
+  } finally {
+    e.target.value = "";
+  }
+});
+
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  if(!state.data) return alert("Primero carga un JSON o usa demo.");
+  const blob = new Blob([JSON.stringify(state.data, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "heidy_portfolio_data.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("printBtn").addEventListener("click", ()=> window.print());
+
+document.getElementById("themeBtn").addEventListener("click", ()=>{
+  setTheme(state.theme === "dark" ? "light" : "dark");
+});
+
+document.querySelectorAll(".time-tabs button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".time-tabs button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    state.range = btn.dataset.range;
+    renderCurve(); // SOLO curva
+  });
+});
+
+function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.color = cssVar("--muted");
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.animation = {duration: 700, easing: "easeOutQuart"};
+
+let charts = {};
+
+function destroyChart(key){
+  if(charts[key]) {
+    charts[key].destroy();
+    charts[key] = null;
+  }
+}
+
+function buildWatchlist(assets){
+  const wrap = document.getElementById("watchlist");
+  wrap.innerHTML = "";
+  const sorted = [...assets].sort((a,b)=> (b.weight||0) - (a.weight||0));
+  sorted.forEach(a=>{
+    const c = ASSET_COLORS[a.asset] || "#888";
+    const pnl = a.pnl || 0;
+    const pnlCls = pnl < 0 ? "neg" : "pos";
+    const sign = pnl < 0 ? "-" : "+";
+    const item = document.createElement("div");
+    item.style.cssText = `
+      display:flex;align-items:center;justify-content:space-between;
+      gap:12px;padding:12px 12px;margin-bottom:10px;border-radius:16px;
+      border:1px solid var(--stroke); background: rgba(0,0,0,.10);
+    `;
+    item.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div style="width:34px;height:34px;border-radius:12px;background:${c}22;border:1px solid ${c}55;display:grid;place-items:center;font-weight:900;color:${c}">${a.asset}</div>
+        <div style="min-width:0">
+          <div style="font-weight:900">${a.asset} · ${(a.weight*100).toFixed(2)}%</div>
+          <div style="color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            Inv. USDT ${fmtMoney(a.invested)} · Val. USDT ${fmtMoney(a.value)}
+          </div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="${pnlCls}" style="font-size:14px">${sign}USDT ${fmtMoney(Math.abs(pnl))}</div>
+        <div style="color:var(--muted);font-size:12px">${fmtPct(a.roi)}</div>
+      </div>
+    `;
+    wrap.appendChild(item);
+  });
+}
+
+function renderKpis(){
+  const d = state.data;
+  const t = d.totals;
+  const invested = t.invested;
+  const value = t.value;
+  const pnl = t.pnl;
+  const roi = t.roi;
+
+  document.getElementById("kpiInvested").textContent = "$" + fmtMoney(invested);
+  document.getElementById("kpiValue").textContent = "$" + fmtMoney(value);
+
+  const pnlEl = document.getElementById("kpiPnL");
+  const roiEl = document.getElementById("kpiRoi");
+  const pnlSign = pnl < 0 ? "-" : "+";
+  pnlEl.textContent = `${pnlSign}$${fmtMoney(Math.abs(pnl))}`;
+  applyNegStyle(pnlEl, pnl);
+  roiEl.textContent = fmtPct(roi) + " ROI";
+
+  document.getElementById("kpiAssets").textContent = d.assets.length;
+  document.getElementById("kpiTx").textContent = d.transactions.length;
+
+  document.getElementById("kpiEx").textContent = 1;
+}
+
+function renderGoal(){
+  const d = state.data;
+  const target = d.goal.targetPnl || 5000;
+  const pnl = d.totals.pnl || 0;
+  const base = d.totals.invested || 0;
+
+  document.getElementById("goalTarget").textContent = "$" + fmtMoney(target);
+  document.getElementById("goalBase").textContent = "$" + fmtMoney(base);
+
+  const pnlEl = document.getElementById("goalPnl");
+  const leftEl = document.getElementById("goalLeft");
+  const pctEl = document.getElementById("goalPct");
+
+  const left = Math.max(0, target - pnl);
+  const pct = target > 0 ? clamp(pnl/target, 0, 1) : 0;
+
+  const pnlSign = pnl < 0 ? "-" : "+";
+  pnlEl.textContent = `${pnlSign}$${fmtMoney(Math.abs(pnl))}`;
+  pnlEl.classList.toggle("bad", pnl < 0);
+  pnlEl.classList.toggle("good", pnl >= 0);
+
+  leftEl.textContent = "$" + fmtMoney(left);
+  pctEl.textContent = (pct*100).toFixed(2) + "%";
+
+  destroyChart("goalGauge");
+  const ctx = document.getElementById("goalGauge");
+  charts.goalGauge = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Progreso", "Falta"],
+      datasets: [{
+        data: [pct, 1-pct],
+        backgroundColor: [cssVar("--accent2"), cssVar("--stroke2")],
+        borderColor: [cssVar("--accent2"), cssVar("--stroke")],
+        borderWidth: 1,
+        cutout: "78%"
+      }]
+    },
+    options: {
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend: {display:false},
+        tooltip: {callbacks:{label:(c)=> c.label + ": " + (c.raw*100).toFixed(2) + "%"}}
+      }
+    },
+    plugins:[{
+      id:"centerText",
+      afterDraw(chart) {
+        const {ctx, chartArea} = chart;
+        const cx = (chartArea.left + chartArea.right) / 2;
+        const cy = (chartArea.top + chartArea.bottom) / 2;
+        ctx.save();
+        ctx.textAlign="center";
+        ctx.fillStyle = cssVar("--text");
+        ctx.font = "900 36px var(--font)";
+        ctx.fillText((pct*100).toFixed(1)+"%", cx, cy+6);
+        ctx.fillStyle = cssVar("--muted");
+        ctx.font = "600 12px var(--font)";
+        ctx.fillText("Progreso P&L", cx, cy+28);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+function renderRisk(){
+  const d = state.data;
+  const weights = d.assets.map(a=>a.weight||0);
+  const hhi = weights.reduce((s,w)=>s+w*w,0);
+  const lossWeight = d.assets.filter(a=>(a.pnl||0)<0).reduce((s,a)=>s+(a.weight||0),0);
+  document.getElementById("hhiVal").textContent = hhi.toFixed(3);
+
+  destroyChart("riskChart");
+  const ctx = document.getElementById("riskChart");
+  charts.riskChart = new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels:["Concentración (HHI)", "Exposición en pérdida"],
+      datasets:[{
+        label:"Indicador",
+        data:[hhi, lossWeight],
+        backgroundColor:[cssVar("--warn"), cssVar("--bad")],
+        borderColor:[cssVar("--stroke2"), cssVar("--stroke2")],
+        borderWidth:1,
+        borderRadius:12,
+        barThickness:44
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(c)=> c.label + ": " + (c.raw).toFixed(3)}}},
+      scales:{
+        y: {
+          min:0, max:1,
+          grid:{color: cssVar("--stroke")},
+          ticks:{callback:(v)=> (v*100).toFixed(0)+"%"}
+        },
+        x: {grid:{display:false}}
+      }
+    }
+  });
+}
+
+function filteredCurvePoints(){
+  const pts = state.data.timeseries.portfolioCurve.map(p=>({t: new Date(p.t), invested:+p.invested, value:+p.value}))
+    .filter(p=>!isNaN(p.t));
+  if(!pts.length) return {pts:[], note:"Sin datos de curva."};
+
+  const end = pts[pts.length-1].t;
+  let start = null;
+  const r = state.range;
+  if(r==="4h") start = new Date(end.getTime() - 4*60*60*1000);
+  else if(r==="1d") start = new Date(end.getTime() - 24*60*60*1000);
+  else if(r==="7d") start = new Date(end.getTime() - 7*24*60*60*1000);
+  else if(r==="30d") start = new Date(end.getTime() - 30*24*60*60*1000);
+  else start = null;
+
+  let out = pts;
+  let note = "Temporalidad aplicada solo a esta curva.";
+  if(start){
+    out = pts.filter(p=>p.t >= start);
+    if(out.length < 2){
+      out = pts.slice(-Math.min(20, pts.length));
+      note = "Ventana sin suficientes puntos: mostrando últimos " + out.length + " registros.";
+    }
+  }
+  return {pts: out, note};
+}
+
+function renderCurve(){
+  const {pts, note} = filteredCurvePoints();
+  document.getElementById("curveNote").textContent = note;
+
+  destroyChart("curveChart");
+  const ctx = document.getElementById("curveChart");
+  const labels = pts.map(p=>p.t);
+  const invested = pts.map(p=>p.invested);
+  const value = pts.map(p=>p.value);
+
+  charts.curveChart = new Chart(ctx, {
+    type:"line",
+    data:{
+      labels,
+      datasets:[
+        {label:"Invertido", data: invested, tension:.25, borderWidth:2, pointRadius:0, borderColor: cssVar("--muted2"), fill:false},
+        {label:"Valor", data: value, tension:.25, borderWidth:2.5, pointRadius:0, borderColor: cssVar("--accent2"), fill:false}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:"top"},
+        tooltip:{mode:"index", intersect:false, callbacks:{label:(c)=> c.dataset.label + ": USDT " + fmtMoney(c.raw)}}
+      },
+      interaction:{mode:"index", intersect:false},
+      scales:{
+        x:{
+          type:"time",
+          time:{tooltipFormat:"dd LLL yyyy, HH:mm", displayFormats:{hour:"dd LLL HH:mm", day:"dd LLL"}},
+          grid:{color: cssVar("--stroke")},
+          ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:8}
+        },
+        y:{
+          grid:{color: cssVar("--stroke")},
+          ticks:{callback:(v)=>"USDT " + new Intl.NumberFormat('en-US').format(v)}
+        }
+      }
+    }
+  });
+}
+
+function renderDonut(){
+  const assets = state.data.assets;
+  destroyChart("donutChart");
+  const ctx = document.getElementById("donutChart");
+  charts.donutChart = new Chart(ctx, {
+    type:"doughnut",
+    data:{
+      labels: assets.map(a=>a.asset),
+      datasets:[{
+        data: assets.map(a=>a.weight),
+        backgroundColor: assets.map(a=> (ASSET_COLORS[a.asset]||"#888") + "CC"),
+        borderColor: assets.map(a=> (ASSET_COLORS[a.asset]||"#888")),
+        borderWidth: 1,
+        cutout:"72%"
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:"bottom"},
+        tooltip:{callbacks:{label:(c)=> `${c.label}: ${(c.raw*100).toFixed(2)}%`}}
+      }
+    }
+  });
+}
+
+function renderBubble(){
+  const assets = state.data.assets;
+  destroyChart("bubbleChart");
+  const ctx = document.getElementById("bubbleChart");
+  charts.bubbleChart = new Chart(ctx, {
+    type:"bubble",
+    data:{
+      datasets: assets.map(a=>({
+        label:a.asset,
+        data:[{x:(a.weight||0)*100, y:(a.roi||0)*100, r: Math.max(8, Math.sqrt(Math.max(0,a.value||0))*0.22)}],
+        backgroundColor: (ASSET_COLORS[a.asset]||"#888") + "66",
+        borderColor: (ASSET_COLORS[a.asset]||"#888"),
+        borderWidth:1.5
+      }))
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom"}},
+      scales:{
+        x:{title:{display:true,text:"% del portafolio"}, grid:{color:cssVar("--stroke")}},
+        y:{title:{display:true,text:"ROI %"}, grid:{color:cssVar("--stroke")}}
+      }
+    }
+  });
+}
+
+function renderPnL(){
+  const assets = state.data.assets;
+  destroyChart("pnlChart");
+  const ctx = document.getElementById("pnlChart");
+  charts.pnlChart = new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels: assets.map(a=>a.asset),
+      datasets:[{
+        label:"P&L (USDT)",
+        data: assets.map(a=>a.pnl),
+        backgroundColor: assets.map(a=> (a.pnl<0 ? cssVar("--bad") : cssVar("--good"))),
+        borderRadius: 12,
+        borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(c)=> "USDT " + fmtMoney(c.raw)}}},
+      scales:{
+        x:{grid:{display:false}},
+        y:{grid:{color:cssVar("--stroke")}, ticks:{callback:(v)=> "USDT " + v}}
+      }
+    }
+  });
+}
+
+function renderReturns(){
+  const pts = state.data.timeseries.dailyReturns || [];
+  destroyChart("retChart");
+  const ctx = document.getElementById("retChart");
+  const labels = pts.map(p=>p.t);
+  const data = pts.map(p=>(p.ret*100));
+
+  charts.retChart = new Chart(ctx, {
+    type:"bar",
+    data:{ labels,
+      datasets:[{
+        label:"Retorno diario (%)",
+        data,
+        backgroundColor: data.map(v=> v<0 ? cssVar("--bad") : cssVar("--accent2")),
+        borderRadius: 10,
+        borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(c)=> c.raw.toFixed(2)+"%"}}},
+      scales:{
+        x:{grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:6}},
+        y:{grid:{color:cssVar("--stroke")}, ticks:{callback:(v)=> v + "%"}}
+      }
+    }
+  });
+}
+
+function renderTable(){
+  const d = state.data;
+  const tbody = document.querySelector("#txTable tbody");
+  const assetSel = document.getElementById("filterAsset").value;
+  const from = document.getElementById("fromDate").value ? new Date(document.getElementById("fromDate").value) : null;
+  const to = document.getElementById("toDate").value ? new Date(document.getElementById("toDate").value + "T23:59:59") : null;
+
+  let rows = d.transactions.map(x=>({
+    ...x,
+    tDate: new Date(x.t)
+  })).filter(r=>!isNaN(r.tDate));
+
+  if(assetSel !== "all") rows = rows.filter(r=>r.asset === assetSel);
+  if(from) rows = rows.filter(r=>r.tDate >= from);
+  if(to) rows = rows.filter(r=>r.tDate <= to);
+
+  const {key, dir} = state.sort;
+  rows.sort((a,b)=>{
+    if(key==="t") return dir==="asc" ? (a.tDate-b.tDate) : (b.tDate-a.tDate);
+    const av = a[key]; const bv = b[key];
+    const an = (typeof av==="number") ? av : (av||"");
+    const bn = (typeof bv==="number") ? bv : (bv||"");
+    if(an < bn) return dir==="asc" ? -1 : 1;
+    if(an > bn) return dir==="asc" ? 1 : -1;
+    return 0;
+  });
+
+  tbody.innerHTML = "";
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    const pnl = (r.pnl ?? 0);
+    const pnlSign = pnl < 0 ? "-" : "+";
+    tr.innerHTML = `
+      <td>${r.tDate.toLocaleString()}</td>
+      <td><strong>${r.asset}</strong></td>
+      <td>${r.side}</td>
+      <td>USDT ${fmtMoney(r.usdt)}</td>
+      <td>${(r.qty ?? "—")}</td>
+      <td>${r.price ? ("USDT " + fmtMoney(r.price)) : "—"}</td>
+      <td>${r.valueNow ? ("USDT " + fmtMoney(r.valueNow)) : "—"}</td>
+      <td class="${pnl<0 ? "neg":"pos"}">${pnlSign}USDT ${fmtMoney(Math.abs(pnl))}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("tableNote").textContent = rows.length ? `${rows.length} registros` : "Sin registros para ese filtro.";
+}
+
+function wireSorting(){
+  document.querySelectorAll("#txTable th").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const key = th.dataset.key;
+      if(!key) return;
+      if(state.sort.key === key) {
+        state.sort.dir = (state.sort.dir === "asc") ? "desc" : "asc";
+      } else {
+        state.sort.key = key;
+        state.sort.dir = (key==="t") ? "desc" : "asc";
+      }
+      renderTable();
+    });
+  });
+}
+
+function populateAssetFilter(){
+  const sel = document.getElementById("filterAsset");
+  sel.innerHTML = `<option value="all">Todos los activos</option>`;
+  const set = new Set((state.data?.transactions||[]).map(x=>x.asset));
+  [...set].sort().forEach(sym=>{
+    const opt = document.createElement("option");
+    opt.value = sym;
+    opt.textContent = sym;
+    sel.appendChild(opt);
+  });
+}
+
+function renderAll(){
+  Chart.defaults.color = cssVar("--muted");
+  Chart.defaults.borderColor = cssVar("--stroke");
+  renderKpis();
+  renderGoal();
+  renderRisk();
+  renderCurve();
+  buildWatchlist(state.data.assets);
+  renderDonut();
+  renderBubble();
+  renderPnL();
+  renderReturns();
+  renderTable();
+}
+
+document.getElementById("filterAsset").addEventListener("change", renderTable);
+document.getElementById("fromDate").addEventListener("change", renderTable);
+document.getElementById("toDate").addEventListener("change", renderTable);
+document.getElementById("clearFilters").addEventListener("click", ()=>{
+  document.getElementById("filterAsset").value="all";
+  document.getElementById("fromDate").value="";
+  document.getElementById("toDate").value="";
+  renderTable();
+});
+
+function init(){
+  setTheme(state.theme);
+  wireSorting();
+  loadData(DEMO_DATA); // evita dashboard vacío
+}
+
+init();
+
+// Mejoras JavaScript para el Dashboard
+// Este código debe ser agregado al final del script en index.html
+
+// ============================================
+// SISTEMA DE NOTIFICACIONES TOAST
+// ============================================
+
+const ToastManager = {
+  container: null,
+  
+  init() {
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.className = 'toast-container';
+      this.container.setAttribute('role', 'region');
+      this.container.setAttribute('aria-label', 'Notificaciones');
+      document.body.appendChild(this.container);
+    }
+  },
+  
+  show(message, type = 'info', duration = 4000) {
+    this.init();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'polite');
+    
+    const icons = {
+      success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.667 5L7.5 14.167 3.333 10"/></svg>',
+      error: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4M10 14h.01"/></svg>',
+      info: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 10v4M10 6h.01"/></svg>',
+      loading: '<div class="spinner"></div>'
+    };
+    
+    toast.innerHTML = `
+      <div class="toast-icon">${icons[type] || icons.info}</div>
+      <div class="toast-message">${message}</div>
+      ${type !== 'loading' ? '<button class="toast-close" aria-label="Cerrar notificación">×</button>' : ''}
+    `;
+    
+    const closeBtn = toast.querySelector('.toast-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.remove(toast));
+    }
+    
+    this.container.appendChild(toast);
+    
+    if (duration > 0 && type !== 'loading') {
+      setTimeout(() => this.remove(toast), duration);
+    }
+    
+    return toast;
+  },
+  
+  remove(toast) {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  },
+  
+  success(message, duration) {
+    return this.show(message, 'success', duration);
+  },
+  
+  error(message, duration) {
+    return this.show(message, 'error', duration || 5000);
+  },
+  
+  info(message, duration) {
+    return this.show(message, 'info', duration);
+  },
+  
+  loading(message) {
+    return this.show(message, 'loading', 0);
+  }
+};
+
+// ============================================
+// SINCRONIZACIÓN CON GOOGLE SHEETS
+// ============================================
+
+const GoogleSheetsSync = {
+  // URL del CSV publicado desde Google Sheets
+  // Reemplazar con tu URL real después de publicar el Sheet
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?gid=0&single=true&output=csv',
+  
+  async sync() {
+    const loadingToast = ToastManager.loading('Sincronizando con Google Sheets...');
+    
+    try {
+      const response = await fetch(this.CSV_URL);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const csvText = await response.text();
+      const jsonData = this.parseCSV(csvText);
+      
+      // Cargar datos en el dashboard
+      loadData(jsonData);
+      
+      ToastManager.remove(loadingToast);
+      ToastManager.success('✓ Datos sincronizados correctamente');
+      
+      return jsonData;
+    } catch (error) {
+      console.error('Error al sincronizar:', error);
+      ToastManager.remove(loadingToast);
+      ToastManager.error('✗ Error al sincronizar con Google Sheets: ' + error.message);
+      throw error;
+    }
+  },
+  
+  parseCSV(csvText) {
+    // Parsear CSV y convertir a formato JSON esperado
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',');
+    
+    const transactions = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      const values = lines[i].split(',');
+      const transaction = {};
+      
+      headers.forEach((header, index) => {
+        transaction[header.trim()] = values[index]?.trim();
+      });
+      
+      transactions.push(transaction);
+    }
+    
+    // Calcular totales y métricas
+    return this.calculateMetrics(transactions);
+  },
+  
+  calculateMetrics(transactions) {
+    // Implementar lógica de cálculo de métricas
+    // Esta es una versión simplificada
+    const assets = {};
+    let totalInvested = 0;
+    let totalValue = 0;
+    
+    transactions.forEach(tx => {
+      const asset = tx.Activo || tx.asset;
+      const invested = parseFloat(tx['Inversión USDT'] || tx.usdt || 0);
+      const value = parseFloat(tx['Valor actual'] || tx.currentValue || 0);
+      
+      if (!assets[asset]) {
+        assets[asset] = { asset, invested: 0, value: 0, transactions: [] };
+      }
+      
+      assets[asset].invested += invested;
+      assets[asset].value += value;
+      assets[asset].transactions.push(tx);
+      
+      totalInvested += invested;
+      totalValue += value;
+    });
+    
+    const assetArray = Object.values(assets).map(a => ({
+      ...a,
+      pnl: a.value - a.invested,
+      roi: a.invested > 0 ? (a.value - a.invested) / a.invested : 0,
+      weight: totalValue > 0 ? a.value / totalValue : 0
+    }));
+    
+    return {
+      totals: {
+        invested: totalInvested,
+        value: totalValue,
+        pnl: totalValue - totalInvested,
+        roi: totalInvested > 0 ? (totalValue - totalInvested) / totalInvested : 0
+      },
+      goal: {
+        targetPnl: 5000
+      },
+      assets: assetArray,
+      transactions: transactions,
+      timeseries: {
+        portfolioCurve: [],
+        dailyReturns: []
+      }
+    };
+  }
+};
+
+// ============================================
+// PAGINACIÓN DE TABLA
+// ============================================
+
+const TablePagination = {
+  currentPage: 1,
+  rowsPerPage: 25,
+  totalRows: 0,
+  filteredData: [],
+  
+  init(data) {
+    this.filteredData = data;
+    this.totalRows = data.length;
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  render() {
+    const start = (this.currentPage - 1) * this.rowsPerPage;
+    const end = start + this.rowsPerPage;
+    const pageData = this.filteredData.slice(start, end);
+    
+    // Renderizar filas de la tabla
+    this.renderTableRows(pageData);
+    
+    // Actualizar controles de paginación
+    this.renderControls();
+  },
+  
+  renderTableRows(data) {
+    const tbody = document.querySelector('#txTable tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    data.forEach(tx => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${new Date(tx.date).toLocaleString('es', {dateStyle:'short', timeStyle:'short'})}</td>
+        <td><strong>${tx.asset}</strong></td>
+        <td>${tx.type}</td>
+        <td>USDT ${fmtMoney(tx.usdt)}</td>
+        <td>${tx.quantity.toFixed(6)}</td>
+        <td>USDT ${fmtMoney(tx.price)}</td>
+        <td>USDT ${fmtMoney(tx.currentValue)}</td>
+        <td class="${tx.pnl < 0 ? 'neg' : 'pos'}">${tx.pnl < 0 ? '-' : '+'}USDT ${fmtMoney(Math.abs(tx.pnl))}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  },
+  
+  renderControls() {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    const start = (this.currentPage - 1) * this.rowsPerPage + 1;
+    const end = Math.min(start + this.rowsPerPage - 1, this.totalRows);
+    
+    let controlsHTML = `
+      <div class="pagination">
+        <div class="pagination-info">
+          Mostrando ${start}-${end} de ${this.totalRows} transacciones
+        </div>
+        <div class="pagination-controls">
+          <button onclick="TablePagination.goToPage(1)" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Primera
+          </button>
+          <button onclick="TablePagination.goToPage(${this.currentPage - 1})" ${this.currentPage === 1 ? 'disabled' : ''}>
+            Anterior
+          </button>
+          <span style="padding: 0 12px; color: var(--text);">
+            Página ${this.currentPage} de ${totalPages}
+          </span>
+          <button onclick="TablePagination.goToPage(${this.currentPage + 1})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Siguiente
+          </button>
+          <button onclick="TablePagination.goToPage(${totalPages})" ${this.currentPage === totalPages ? 'disabled' : ''}>
+            Última
+          </button>
+          <select onchange="TablePagination.changeRowsPerPage(this.value)" style="margin-left: 12px;">
+            <option value="10" ${this.rowsPerPage === 10 ? 'selected' : ''}>10 por página</option>
+            <option value="25" ${this.rowsPerPage === 25 ? 'selected' : ''}>25 por página</option>
+            <option value="50" ${this.rowsPerPage === 50 ? 'selected' : ''}>50 por página</option>
+            <option value="100" ${this.rowsPerPage === 100 ? 'selected' : ''}>100 por página</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    // Insertar o actualizar controles
+    let paginationContainer = document.querySelector('.pagination');
+    if (paginationContainer) {
+      paginationContainer.outerHTML = controlsHTML;
+    } else {
+      const tableWrap = document.querySelector('.table-wrap');
+      if (tableWrap) {
+        tableWrap.insertAdjacentHTML('beforeend', controlsHTML);
+      }
+    }
+  },
+  
+  goToPage(page) {
+    const totalPages = Math.ceil(this.totalRows / this.rowsPerPage);
+    if (page < 1 || page > totalPages) return;
+    
+    this.currentPage = page;
+    this.render();
+  },
+  
+  changeRowsPerPage(value) {
+    this.rowsPerPage = parseInt(value);
+    this.currentPage = 1;
+    this.render();
+  },
+  
+  filter(filterFn) {
+    this.filteredData = this.filteredData.filter(filterFn);
+    this.totalRows = this.filteredData.length;
+    this.currentPage = 1;
+    this.render();
+  }
+};
+
+// ============================================
+// TOOLTIPS EXPLICATIVOS
+// ============================================
+
+const Tooltips = {
+  definitions: {
+    'HHI': {
+      title: 'Índice Herfindahl-Hirschman (HHI)',
+      description: 'Mide la concentración del portafolio. Valores cercanos a 0 indican alta diversificación, valores cercanos a 1 indican alta concentración en pocos activos.',
+      interpretation: (value) => {
+        if (value < 0.15) return 'Diversificación alta ✓';
+        if (value < 0.25) return 'Diversificación moderada';
+        return 'Concentración alta ⚠';
+      }
+    },
+    'ROI': {
+      title: 'Return on Investment (ROI)',
+      description: 'Retorno sobre inversión expresado como porcentaje. Indica la ganancia o pérdida relativa al capital invertido.',
+      interpretation: (value) => {
+        if (value > 0.1) return 'Rendimiento excelente ✓';
+        if (value > 0) return 'Rendimiento positivo';
+        return 'Pérdida actual ⚠';
+      }
+    },
+    'P&L': {
+      title: 'Profit & Loss (P&L)',
+      description: 'Ganancia o pérdida absoluta en USDT. Diferencia entre el valor actual del portafolio y el capital invertido.',
+      interpretation: (value) => {
+        if (value > 0) return 'En ganancia ✓';
+        if (value === 0) return 'En equilibrio';
+        return 'En pérdida ⚠';
+      }
+    },
+    'DCA': {
+      title: 'Dollar Cost Averaging',
+      description: 'Estrategia de inversión que consiste en comprar cantidades fijas de un activo a intervalos regulares, independientemente del precio.',
+      interpretation: () => 'Reduce el riesgo de volatilidad'
+    }
+  },
+  
+  addToElement(elementId, metricKey, currentValue = null) {
+    const element = document.getElementById(elementId);
+    if (!element || !this.definitions[metricKey]) return;
+    
+    const def = this.definitions[metricKey];
+    const parent = element.parentElement;
+    
+    // Crear wrapper con tooltip
+    const wrapper = document.createElement('span');
+    wrapper.className = 'tooltip';
+    wrapper.style.cursor = 'help';
+    
+    const tooltipText = document.createElement('span');
+    tooltipText.className = 'tooltiptext';
+    tooltipText.innerHTML = `
+      <strong>${def.title}</strong><br>
+      ${def.description}<br>
+      ${currentValue !== null ? `<br><em>${def.interpretation(currentValue)}</em>` : ''}
+    `;
+    
+    // Reemplazar elemento original con wrapper
+    parent.replaceChild(wrapper, element);
+    wrapper.appendChild(element);
+    wrapper.appendChild(tooltipText);
+  }
+};
+
+// ============================================
+// MEJORAS EN EVENTOS Y ACCESIBILIDAD
+// ============================================
+
+function enhanceAccessibility() {
+  // Agregar roles ARIA a secciones principales
+  document.querySelector('.topbar')?.setAttribute('role', 'banner');
+  document.querySelector('.kpis')?.setAttribute('role', 'region');
+  document.querySelector('.kpis')?.setAttribute('aria-label', 'Indicadores clave de rendimiento');
+  
+  // Mejorar navegación por teclado en botones
+  document.querySelectorAll('button, .pill').forEach(btn => {
+    if (!btn.hasAttribute('tabindex')) {
+      btn.setAttribute('tabindex', '0');
+    }
+    
+    // Agregar soporte para Enter y Space
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  });
+  
+  // Mejorar accesibilidad de gráficos
+  document.querySelectorAll('canvas').forEach(canvas => {
+    if (!canvas.hasAttribute('role')) {
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', 'Gráfico de visualización de datos');
+    }
+  });
+}
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+// Ejecutar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initEnhancements);
+} else {
+  initEnhancements();
+}
+
+function initEnhancements() {
+  // Inicializar sistema de notificaciones
+  ToastManager.init();
+  
+  // Mejorar accesibilidad
+  enhanceAccessibility();
+  
+  // Agregar tooltips a métricas clave
+  // (Ejecutar después de que los datos se carguen)
+  
+  // Agregar botón de sincronización con Google Sheets
+  addSyncButton();
+  
+  console.log('✓ Mejoras del dashboard inicializadas correctamente');
+}
+
+function addSyncButton() {
+  const pills = document.querySelector('.pills');
+  if (!pills) return;
+  
+  // Crear botón de sincronización
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'pill primary';
+  syncBtn.id = 'syncBtn';
+  syncBtn.innerHTML = '🔄 Sincronizar Google Sheet';
+  syncBtn.setAttribute('aria-label', 'Sincronizar datos desde Google Sheets');
+  
+  syncBtn.addEventListener('click', async () => {
+    try {
+      await GoogleSheetsSync.sync();
+    } catch (error) {
+      console.error('Error en sincronización:', error);
+    }
+  });
+  
+  // Insertar antes del botón de demo
+  const demoBtn = document.getElementById('demoBtn');
+  if (demoBtn) {
+    pills.insertBefore(syncBtn, demoBtn);
+  } else {
+    pills.appendChild(syncBtn);
+  }
+}
+
+// Exportar funciones globales
+window.ToastManager = ToastManager;
+window.GoogleSheetsSync = GoogleSheetsSync;
+window.TablePagination = TablePagination;
+window.Tooltips = Tooltips;
+
+</script>
+</body>
+</html>
