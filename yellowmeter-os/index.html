@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="YellowMeter OS - Infraestructura de State Channels para la Economía de Acciones en Web3. Reduce costos en 99% y latencia a 50ms.">
+    <title>YellowMeter OS - Economía de Acciones para Web3</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="logo-text">YellowMeter OS</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#home">Inicio</a></li>
+                <li><a href="#metrics">Métricas</a></li>
+                <li><a href="#market">Mercado</a></li>
+                <li><a href="#financials">Proyecciones</a></li>
+                <li><a href="#roadmap">Roadmap</a></li>
+                <li><a href="#calculator">Calculadora</a></li>
+                <li><a href="#docs">Docs</a></li>
+            </ul>
+            <button class="theme-toggle" id="themeToggle" aria-label="Cambiar tema">
+                <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="5" stroke-width="2"/>
+                    <line x1="12" y1="1" x2="12" y2="3" stroke-width="2"/>
+                    <line x1="12" y1="21" x2="12" y2="23" stroke-width="2"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke-width="2"/>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke-width="2"/>
+                    <line x1="1" y1="12" x2="3" y2="12" stroke-width="2"/>
+                    <line x1="21" y1="12" x2="23" y2="12" stroke-width="2"/>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke-width="2"/>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke-width="2"/>
+                </svg>
+                <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke-width="2"/>
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    Monetiza <span class="highlight">Acciones</span>,<br>
+                    No Transacciones
+                </h1>
+                <p class="hero-subtitle">
+                    Infraestructura de State Channels que permite miles de operaciones off-chain instantáneas (50ms) y sin gas, liquidadas en una sola transacción on-chain.
+                </p>
+                <div class="hero-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">99%</div>
+                        <div class="stat-label">Reducción de Costos</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">50ms</div>
+                        <div class="stat-label">Latencia por Acción</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">$42.7B</div>
+                        <div class="stat-label">Mercado Web3 2030</div>
+                    </div>
+                </div>
+                <div class="hero-cta">
+                    <a href="#docs" class="btn btn-primary">Ver Documentación</a>
+                    <a href="#calculator" class="btn btn-secondary">Calcular Ahorro</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Value Proposition -->
+    <section class="value-prop">
+        <div class="container">
+            <h2 class="section-title">La Economía de Acciones</h2>
+            <p class="section-subtitle">
+                El modelo actual de blockchain "una interacción = una transacción" es insostenible para aplicaciones complejas. YellowMeter OS lo resuelve.
+            </p>
+            <div class="comparison-grid">
+                <div class="comparison-card problem">
+                    <h3>❌ Blockchain Tradicional</h3>
+                    <ul>
+                        <li>Altos costos de gas ($2.48B en fees Ethereum 2024)</li>
+                        <li>Alta latencia (15s - varios minutos)</li>
+                        <li>Múltiples firmas en wallet (mala UX)</li>
+                        <li>Micro-transacciones inviables</li>
+                    </ul>
+                </div>
+                <div class="comparison-card solution">
+                    <h3>✅ YellowMeter OS</h3>
+                    <ul>
+                        <li>Costo por acción: $0.00005 - $0.0001</li>
+                        <li>Latencia instantánea: 50ms</li>
+                        <li>Una firma para toda la sesión</li>
+                        <li>Miles de acciones off-chain</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Market Opportunity -->
+    <section id="market" class="market-section">
+        <div class="container">
+            <h2 class="section-title">Oportunidad de Mercado</h2>
+            <div class="market-grid">
+                <div class="market-card">
+                    <div class="market-icon">🎮</div>
+                    <h3>Web3 Gaming</h3>
+                    <div class="market-size">$25B</div>
+                    <p>Economías de juego complejas y en tiempo real sin fricción de gas.</p>
+                </div>
+                <div class="market-card">
+                    <div class="market-icon">🤖</div>
+                    <h3>IA Descentralizada</h3>
+                    <div class="market-size">$10B</div>
+                    <p>Pago por token o por segundo de uso de modelos de IA.</p>
+                </div>
+                <div class="market-card">
+                    <div class="market-icon">🔌</div>
+                    <h3>APIs Programables</h3>
+                    <div class="market-size">$8B</div>
+                    <p>Micropagos por llamada a API y monetización de datos.</p>
+                </div>
+            </div>
+            
+            <div class="market-data">
+                <h3>Datos del Mercado Verificables</h3>
+                <div class="data-grid">
+                    <div class="data-card">
+                        <div class="data-label">Mercado Web3 Infrastructure (2030)</div>
+                        <div class="data-value">$42.7B</div>
+                        <div class="data-source">Fuente: StrategyMRC</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">Gas Fees Ethereum (2024)</div>
+                        <div class="data-value">$2.48B</div>
+                        <div class="data-source">Fuente: CoinGecko</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">Reducción Costos Layer 2</div>
+                        <div class="data-value">90%</div>
+                        <div class="data-source">Fuente: Yahoo Finance</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="data-label">Reducción Costos State Channels</div>
+                        <div class="data-value">99%</div>
+                        <div class="data-source">Estimado YellowMeter OS</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Real-time Metrics Dashboard -->
+    <section id="metrics" class="metrics-section">
+        <div class="container">
+            <h2 class="section-title">Métricas en Tiempo Real</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-icon">⚡</div>
+                    <div class="metric-value" id="actionsPerSecond">0</div>
+                    <div class="metric-label">Acciones/Segundo</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">💰</div>
+                    <div class="metric-value" id="volumeUSDC">$0</div>
+                    <div class="metric-label">Volumen USDC</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">🔗</div>
+                    <div class="metric-value" id="activeSessions">0</div>
+                    <div class="metric-label">Sesiones Activas</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon">⏱️</div>
+                    <div class="metric-value" id="avgLatency">0ms</div>
+                    <div class="metric-label">Latencia Promedio</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Comparativa de Latencia</h3>
+                <canvas id="latencyChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Comparativa de Costos</h3>
+                <canvas id="costsChart"></canvas>
+            </div>
+        </div>
+    </section>
+
+    <!-- Financial Projections -->
+    <section id="financials" class="financials-section">
+        <div class="container">
+            <h2 class="section-title">Proyecciones Financieras (2 Años)</h2>
+            <p class="section-subtitle">
+                Proyecciones conservadoras basadas en tasa de conversión del 5% (Free a Pro) y crecimiento de 2 clientes Pro/mes.
+            </p>
+            
+            <div class="projection-summary">
+                <div class="projection-card">
+                    <div class="projection-label">ARR Año 1</div>
+                    <div class="projection-value">$244K</div>
+                    <div class="projection-detail">24 Pro + 1 Enterprise</div>
+                </div>
+                <div class="projection-card">
+                    <div class="projection-label">ARR Año 2</div>
+                    <div class="projection-value">$1.48M</div>
+                    <div class="projection-detail">48 Pro + 4 Enterprise</div>
+                </div>
+                <div class="projection-card">
+                    <div class="projection-label">Punto de Equilibrio</div>
+                    <div class="projection-value">Q2 2027</div>
+                    <div class="projection-detail">Costos: $600K/año</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Crecimiento de ARR</h3>
+                <canvas id="arrChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Crecimiento de Clientes</h3>
+                <canvas id="clientsChart"></canvas>
+            </div>
+            
+            <div class="assumptions">
+                <h3>Supuestos Clave</h3>
+                <ul>
+                    <li><strong>Tasa de Conversión (Free → Pro):</strong> 5%</li>
+                    <li><strong>ARPA (Ingreso Promedio por Cuenta Pro):</strong> $500/mes</li>
+                    <li><strong>Crecimiento de Clientes Pro:</strong> 2 nuevos clientes/mes</li>
+                    <li><strong>Clientes Enterprise:</strong> 1 en Año 1, 3 adicionales en Año 2</li>
+                    <li><strong>Estructura de Costos:</strong> Equipo ($400K), Marketing ($150K), Infraestructura ($50K)</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing-section">
+        <div class="container">
+            <h2 class="section-title">Modelo de Precios</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Developer</h3>
+                    <div class="price">Gratis</div>
+                    <ul class="features">
+                        <li>$0.0001 por acción</li>
+                        <li>0.5% fee por volumen</li>
+                        <li>Ideal para prototipos</li>
+                        <li>Soporte comunitario</li>
+                    </ul>
+                </div>
+                <div class="pricing-card featured">
+                    <div class="badge">Popular</div>
+                    <h3>Startup (Pro)</h3>
+                    <div class="price">$500<span>/mes</span></div>
+                    <ul class="features">
+                        <li>$0.00005 por acción</li>
+                        <li>0.2% fee por volumen</li>
+                        <li>Hasta 1M acciones/mes</li>
+                        <li>Soporte prioritario</li>
+                    </ul>
+                </div>
+                <div class="pricing-card">
+                    <h3>Enterprise</h3>
+                    <div class="price">Custom</div>
+                    <ul class="features">
+                        <li>Fee negociable < 0.1%</li>
+                        <li>Volumen ilimitado</li>
+                        <li>SLA garantizado</li>
+                        <li>Soporte dedicado</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cost Calculator -->
+    <section id="calculator" class="calculator-section">
+        <div class="container">
+            <h2 class="section-title">Calculadora de Ahorro de Costos</h2>
+            <div class="calculator-container">
+                <div class="calculator-inputs">
+                    <div class="input-group">
+                        <label for="actionCount">Número de Acciones</label>
+                        <input type="number" id="actionCount" value="1000000" min="1000" step="1000">
+                    </div>
+                    <div class="input-group">
+                        <label for="actionValue">Valor Promedio por Acción (USDC)</label>
+                        <input type="number" id="actionValue" value="0.01" min="0.001" step="0.001">
+                    </div>
+                    <button class="btn btn-primary" onclick="calculateCosts()">Calcular</button>
+                </div>
+                
+                <div class="calculator-results">
+                    <h3>Resultados</h3>
+                    <div class="result-grid">
+                        <div class="result-card l1">
+                            <div class="result-label">Ethereum L1</div>
+                            <div class="result-value" id="costL1">$0</div>
+                            <div class="result-detail">Gas fees estimados</div>
+                        </div>
+                        <div class="result-card l2">
+                            <div class="result-label">Layer 2</div>
+                            <div class="result-value" id="costL2">$0</div>
+                            <div class="result-detail">90% reducción</div>
+                        </div>
+                        <div class="result-card yellowmeter">
+                            <div class="result-label">YellowMeter OS</div>
+                            <div class="result-value" id="costYellowMeter">$0</div>
+                            <div class="result-detail">99% reducción</div>
+                        </div>
+                    </div>
+                    
+                    <div class="savings-summary">
+                        <div class="savings-item">
+                            <span>Ahorro vs L1:</span>
+                            <span id="savingsL1" class="savings-value">$0 (0%)</span>
+                        </div>
+                        <div class="savings-item">
+                            <span>Ahorro vs L2:</span>
+                            <span id="savingsL2" class="savings-value">$0 (0%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section id="roadmap" class="roadmap-section">
+        <div class="container">
+            <h2 class="section-title">Roadmap Técnico</h2>
+            <div class="roadmap-timeline">
+                <div class="roadmap-phase">
+                    <div class="phase-header">
+                        <h3>Fase 1: Fundación</h3>
+                        <span class="phase-period">Q1-Q2 2026</span>
+                    </div>
+                    <div class="phase-items">
+                        <div class="roadmap-item in-progress">
+                            <h4>MVP Funcional</h4>
+                            <p>Contratos SessionSafe auditados, SDK TypeScript, documentación completa</p>
+                        </div>
+                        <div class="roadmap-item in-progress">
+                            <h4>Dashboard de Desarrollador</h4>
+                            <p>Panel de métricas en tiempo real, integración de APIs, guías de inicio rápido</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="roadmap-phase">
+                    <div class="phase-header">
+                        <h3>Fase 2: Crecimiento</h3>
+                        <span class="phase-period">Q3-Q4 2026</span>
+                    </div>
+                    <div class="phase-items">
+                        <div class="roadmap-item planned">
+                            <h4>Soporte Multi-Token</h4>
+                            <p>ETH, wBTC y otros tokens ERC-20. Planes de precios automatizados</p>
+                        </div>
+                        <div class="roadmap-item planned">
+                            <h4>SDKs Adicionales</h4>
+                            <p>Python SDK, Unity SDK, ejemplos de integración</p>
+                        </div>
+                        <div class="roadmap-item planned">
+                            <h4>Escalabilidad Backend</h4>
+                            <p>Soporte para 100M acciones/mes, sistema de alertas</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="roadmap-phase">
+                    <div class="phase-header">
+                        <h3>Fase 3: Expansión</h3>
+                        <span class="phase-period">2027</span>
+                    </div>
+                    <div class="phase-items">
+                        <div class="roadmap-item planned">
+                            <h4>Soluciones Gaming</h4>
+                            <p>Anti-cheat off-chain, optimizaciones para juegos AAA</p>
+                        </div>
+                        <div class="roadmap-item planned">
+                            <h4>Abstracción de Cuentas</h4>
+                            <p>UX sin wallets, onboarding simplificado</p>
+                        </div>
+                        <div class="roadmap-item planned">
+                            <h4>Multi-Chain</h4>
+                            <p>Despliegue en Arbitrum, Optimism, Base</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technical Documentation -->
+    <section id="docs" class="docs-section">
+        <div class="container">
+            <h2 class="section-title">Documentación Técnica</h2>
+            
+            <div class="docs-grid">
+                <div class="doc-card">
+                    <h3>🏗️ Arquitectura</h3>
+                    <p>Cómo funciona SessionSafe y el flujo de acciones off-chain con Yellow Network State Channels.</p>
+                    <a href="#" class="doc-link">Ver detalles →</a>
+                </div>
+                <div class="doc-card">
+                    <h3>🚀 Inicio Rápido</h3>
+                    <p>Integra YellowMeter OS en tu aplicación en menos de 10 minutos con nuestro SDK.</p>
+                    <a href="#" class="doc-link">Ver guía →</a>
+                </div>
+                <div class="doc-card">
+                    <h3>📚 API Reference</h3>
+                    <p>Documentación completa de endpoints, tipos y ejemplos de código.</p>
+                    <a href="#" class="doc-link">Ver API →</a>
+                </div>
+                <div class="doc-card">
+                    <h3>💡 Casos de Uso</h3>
+                    <p>Ejemplos reales de implementación en gaming, IA y APIs programables.</p>
+                    <a href="#" class="doc-link">Ver ejemplos →</a>
+                </div>
+            </div>
+            
+            <div class="architecture-diagram">
+                <h3>Flujo de Arquitectura</h3>
+                <div class="diagram-container">
+                    <div class="flow-step">
+                        <div class="step-number">1</div>
+                        <h4>Apertura de Canal</h4>
+                        <p>Usuario deposita fondos en SessionSafe</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="step-number">2</div>
+                        <h4>Ejecución Off-Chain</h4>
+                        <p>Miles de acciones instantáneas (50ms)</p>
+                    </div>
+                    <div class="flow-arrow">→</div>
+                    <div class="flow-step">
+                        <div class="step-number">3</div>
+                        <h4>Cierre y Liquidación</h4>
+                        <p>Una transacción on-chain final</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="code-example">
+                <h3>Ejemplo de Integración (TypeScript)</h3>
+                <pre><code>import { YellowMeterSDK } from '@yellowmeter/sdk';
+
+// Inicializar SDK
+const sdk = new YellowMeterSDK({
+  contractAddress: '0x...',
+  rpcUrl: 'https://sepolia.infura.io/v3/...'
+});
+
+// Abrir sesión
+const session = await sdk.openSession({
+  amount: 100, // USDC
+  user: userAddress
+});
+
+// Ejecutar acciones off-chain
+for (let i = 0; i < 1000; i++) {
+  await session.executeAction({
+    type: 'AI_INFERENCE',
+    cost: 0.02 // USDC
+  });
+}
+
+// Cerrar sesión y liquidar
+await session.close();</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Go-to-Market Strategy -->
+    <section class="gtm-section">
+        <div class="container">
+            <h2 class="section-title">Estrategia Go-to-Market</h2>
+            <div class="gtm-timeline">
+                <div class="gtm-phase">
+                    <div class="gtm-period">Mes 1-2</div>
+                    <h3>Comunidad de Desarrolladores</h3>
+                    <p>Lanzamiento en comunidades Web3, eventos técnicos y foros especializados. Plan Developer gratuito con soporte intensivo.</p>
+                </div>
+                <div class="gtm-phase">
+                    <div class="gtm-period">Mes 2-4</div>
+                    <h3>Contenido para Desarrolladores</h3>
+                    <p>Tutoriales, guías de inicio rápido y videos de integración. Publicación en Medium, Mirror y YouTube.</p>
+                </div>
+                <div class="gtm-phase">
+                    <div class="gtm-period">Mes 3-6</div>
+                    <h3>Programa de Grants</h3>
+                    <p>$50,000 para los 10 proyectos más innovadores que construyan sobre nuestra infraestructura.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Team -->
+    <section class="team-section">
+        <div class="container">
+            <h2 class="section-title">Equipo</h2>
+            <div class="team-grid">
+                <div class="team-card">
+                    <div class="team-icon">👔</div>
+                    <h3>CEO / Product Lead</h3>
+                    <p>Estrategia, visión de producto y relaciones comerciales</p>
+                </div>
+                <div class="team-card">
+                    <div class="team-icon">⚙️</div>
+                    <h3>Backend Engineer</h3>
+                    <p>Desarrollo del core de infraestructura y smart contracts</p>
+                </div>
+                <div class="team-card">
+                    <div class="team-icon">🎨</div>
+                    <h3>Frontend Engineer</h3>
+                    <p>Desarrollo del SDK, dashboard y experiencia de usuario</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="logo-text">YellowMeter OS</span>
+                </div>
+                <div class="footer-links">
+                    <a href="#docs">Documentación</a>
+                    <a href="#market">Mercado</a>
+                    <a href="#financials">Proyecciones</a>
+                    <a href="https://github.com/cosu123/Crypto_Dashboard_2026" target="_blank">GitHub</a>
+                </div>
+                <div class="footer-copy">
+                    <p>&copy; 2026 YellowMeter OS. Powered by Yellow Network.</p>
+                    <p class="footer-note">Datos de mercado verificables de fuentes públicas: StrategyMRC, CoinGecko, Yahoo Finance.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
